@@ -2,7 +2,7 @@
 
 `codeq` is a small CLI that returns precise code facts for LLM coding agents without requiring a resident LSP server or MCP process.
 
-It composes local tools such as `ctags`, `ast-grep`, and `grep` to answer narrow questions:
+It composes local tools — `ctags` for symbol indexing, `ast-grep` for structural search, and a deterministic lexical search (ripgrep when available, else a built-in pure-Python walker) — to answer narrow questions:
 
 ```bash
 codeq find NAME -p .
@@ -16,8 +16,10 @@ codeq rdeps FILE -p .
 codeq map -p . --save
 codeq tags -p . -o .tags
 codeq check 'print($X)' -l python
+codeq summary NAME FILE --no-llm
 codeq context NAME FILE -p . --no-llm
 codeq relations NAME FILE -p . --no-llm
+codeq doctor                # check required/optional external binaries
 ```
 
 The goal is to give an agent the exact symbol body, signature, references, imports, or repo map it needs without dumping whole files into context.
@@ -25,10 +27,12 @@ The goal is to give an agent the exact symbol body, signature, references, impor
 ## Requirements
 
 - Python 3.11+
-- `ctags` on `PATH` (Universal Ctags recommended)
-- `ast-grep` on `PATH`
-- `grep` on `PATH`
+- `ctags` on `PATH` (Universal Ctags; required)
+- `ast-grep` on `PATH` (required)
+- Optional: `ripgrep` on `PATH` — speeds up `refs`/`rdeps`; a built-in pure-Python walker is used otherwise. codeq NEVER depends on the system `grep`, whose behavior varies across GNU/ugrep/busybox/BSD.
 - Optional: local Ollama plus `ollama_client.py` for `summary`, `context`, `relations`, and `--summary`
+
+Run `codeq doctor` to check what is installed (`codeq doctor --install` installs missing binaries via cargo/npm/pipx where possible).
 
 ## Install For Development
 
