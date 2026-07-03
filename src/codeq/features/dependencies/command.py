@@ -6,8 +6,9 @@ import sys
 from pathlib import Path
 
 from codeq.features.dependencies.parsing import re_deps
-from codeq.shared.config import FILE_EXCLUDES, IMPORT_PATTERNS, VENDOR_EXCLUDES
-from codeq.shared.core import die, lang_of, run
+from codeq.shared.config import IMPORT_PATTERNS
+from codeq.shared.core import die, lang_of
+from codeq.shared.search import search_lexical
 
 # vs-soft-allow — remaining nesting-depth-4 hits are PRE-EXISTING (the
 # for/if/for chain in _py_deps and _is_import_of, plus one line-continuation),
@@ -75,13 +76,13 @@ def _resolves_to(path: str, target: Path) -> bool:
 
 
 def _rdep_rows_for_key(
-    out: str, key: str, target: Path, lang: str
+    lines: list[str], key: str, target: Path, lang: str
 ) -> list[tuple[str, int, str]]:
-    """Parse one grep result block OUT into candidate rdep rows for module KEY
-    (self-references filtered, not yet deduped across keys). Extracted from
-    cmd_rdeps to keep nesting shallow; caller dedups across keys."""
+    """Parse search result LINES (`path:line:text`) into candidate rdep rows
+    for module KEY (self-references filtered, not yet deduped across keys).
+    Extracted from cmd_rdeps to keep nesting shallow; caller dedups."""
     rows: list[tuple[str, int, str]] = []
-    for line in out.splitlines():
+    for line in lines:
         m = re.match(r"^(.*?):(\d+):(.*)$", line)
         if not m:
             continue
@@ -135,16 +136,8 @@ def cmd_rdeps(args: argparse.Namespace) -> int:
     seen: set[tuple[str, str]] = set()
     rows: list[tuple[str, int, str]] = []
     for key in keys:
-        cmd = ["grep", "-rnwI", "--color=never"]
-        for ex in VENDOR_EXCLUDES:
-            cmd += [f"--exclude-dir={ex}"]
-        for ex in FILE_EXCLUDES:
-            cmd += [f"--exclude={ex}"]
-        cmd += includes + ["-e", key, args.path]
-        rc, out, err = run(cmd)
-        if rc == 2:
-            die(f"grep error: {err.strip()}", 2)
-        for path, ln, text in _rdep_rows_for_key(out, key, target, lang):
+        hits = search_lexical(key, args.path, includes)
+        for path, ln, text in _rdep_rows_for_key(hits, key, target, lang):
             dedup = (path, text)
             if dedup in seen:
                 continue
