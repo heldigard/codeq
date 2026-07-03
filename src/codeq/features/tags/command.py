@@ -4,8 +4,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from codeq.shared.config import CACHE_GLOBS, CTAGS, FILE_EXCLUDES, VENDOR_EXCLUDES
-from codeq.shared.core import die, run
+from codeq.shared.config import CTAGS, VENDOR_EXCLUDES
+from codeq.shared.core import ctags_exclude_args, die, run
 
 def cmd_tags(args: argparse.Namespace) -> int:
     """Project-wide ctags index (.tags) with VENDOR_EXCLUDES applied. Replaces the
@@ -14,12 +14,7 @@ def cmd_tags(args: argparse.Namespace) -> int:
     symbols. Shares the SAME exclude list as find/refs (single source of truth)."""
     out_file = args.output
     cmd = [CTAGS, "-R", "--fields=+nKz", "-f", out_file]
-    for ex in VENDOR_EXCLUDES:
-        cmd += [f"--exclude={ex}"]
-    for g in CACHE_GLOBS:
-        cmd += [f"--exclude={g}"]
-    for ex in FILE_EXCLUDES:
-        cmd += [f"--exclude={ex}"]
+    cmd += ctags_exclude_args()
     cmd += [args.path]
     rc, _, err = run(cmd)
     if rc != 0:

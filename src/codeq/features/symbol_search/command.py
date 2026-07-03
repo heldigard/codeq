@@ -4,18 +4,13 @@ import argparse
 import sys
 from pathlib import Path
 
-from codeq.shared.config import CACHE_GLOBS, CTAGS, FILE_EXCLUDES, VENDOR_EXCLUDES, _FIND_SWEEP_FILE_CAP
-from codeq.shared.core import _parse_ctags_line, die, lang_of, run
+from codeq.shared.config import CACHE_GLOBS, CTAGS, VENDOR_EXCLUDES, _FIND_SWEEP_FILE_CAP
+from codeq.shared.core import _parse_ctags_line, ctags_exclude_args, die, lang_of, run
 from codeq.shared.locators import _locate_line, _regex_outline_methods
 
 def cmd_find(args: argparse.Namespace) -> int:
     cmd = [CTAGS, "-R", "--fields=+Kzn", "-f", "-"]
-    for ex in VENDOR_EXCLUDES:
-        cmd += [f"--exclude={ex}"]  # =form is required: space-form `--exclude X` is silently ignored by ctags when there are many excludes
-    for g in CACHE_GLOBS:
-        cmd += [f"--exclude={g}"]
-    for ex in FILE_EXCLUDES:
-        cmd += [f"--exclude={ex}"]
+    cmd += ctags_exclude_args()
     cmd += [args.path]
     rc, out, _ = run(cmd)
     if rc != 0:
