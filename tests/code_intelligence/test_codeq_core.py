@@ -55,11 +55,15 @@ def test_codeq_java(fixture_dir: Path) -> None:
 
     # body of a METHOD (not the class) returns the exact method body
     result = run(["codeq", "body", "getId", str(customer)])
-    assert "public Long getId" in result.stdout, f"codeq body Java method failed: {result.stdout}"
+    assert "public Long getId" in result.stdout, (
+        f"codeq body Java method failed: {result.stdout}"
+    )
 
     # refs finds the call site in CustomerService.java
     result = run(["codeq", "refs", "displayName", "-p", str(fixture_dir)])
-    assert "CustomerService.java" in result.stdout, f"codeq refs Java failed: {result.stdout}"
+    assert "CustomerService.java" in result.stdout, (
+        f"codeq refs Java failed: {result.stdout}"
+    )
 
 
 def test_codeq_class(fixture_dir: Path) -> None:
@@ -70,7 +74,9 @@ def test_codeq_class(fixture_dir: Path) -> None:
     result = run(["codeq", "class", "Customer", str(customer)])
     # displayName + getId are non-constructor methods; present only if the whole
     # class body was returned, not truncated to the constructor.
-    assert "public class Customer" in result.stdout, f"codeq class missing class line: {result.stdout}"
+    assert "public class Customer" in result.stdout, (
+        f"codeq class missing class line: {result.stdout}"
+    )
     assert "displayName" in result.stdout and "getId" in result.stdout, (
         f"codeq class did not return the full class body: {result.stdout}"
     )
@@ -81,9 +87,13 @@ def test_codeq_rdeps(fixture_dir: Path) -> None:
     Python: main.py does `from calc import calculate` → calc.py's importer.
     TS: relative-path import resolves by last path segment. The module itself
     must never list as its own importer; a never-imported file exits 1."""
-    result = run(["codeq", "rdeps", str(fixture_dir / "calc.py"), "-p", str(fixture_dir)])
+    result = run(
+        ["codeq", "rdeps", str(fixture_dir / "calc.py"), "-p", str(fixture_dir)]
+    )
     assert "main.py" in result.stdout, f"rdeps missed main.py: {result.stdout}"
-    assert "calc.py:" not in result.stdout, f"rdeps listed the module itself: {result.stdout}"
+    assert "calc.py:" not in result.stdout, (
+        f"rdeps listed the module itself: {result.stdout}"
+    )
     # TS relative import
     (fixture_dir / "rdeps-consumer.ts").write_text(
         "import { helper } from './rdeps-lib';\nexport const x = helper();\n"
@@ -91,23 +101,47 @@ def test_codeq_rdeps(fixture_dir: Path) -> None:
     (fixture_dir / "rdeps-lib.ts").write_text(
         "export function helper(): number { return 1; }\n"
     )
-    result = run(["codeq", "rdeps", str(fixture_dir / "rdeps-lib.ts"), "-p", str(fixture_dir)])
-    assert "rdeps-consumer.ts" in result.stdout, f"rdeps TS missed consumer: {result.stdout}"
+    result = run(
+        ["codeq", "rdeps", str(fixture_dir / "rdeps-lib.ts"), "-p", str(fixture_dir)]
+    )
+    assert "rdeps-consumer.ts" in result.stdout, (
+        f"rdeps TS missed consumer: {result.stdout}"
+    )
     # never-imported file → exit 1
     result = run(
         ["codeq", "rdeps", str(fixture_dir / "debug.py"), "-p", str(fixture_dir)],
         check=False,
     )
-    assert result.returncode == 1, f"rdeps should exit 1 for no importers: {result.stdout}"
+    assert result.returncode == 1, (
+        f"rdeps should exit 1 for no importers: {result.stdout}"
+    )
+
+
+def test_codeq_rdeps_multiline_importer(fixture_dir: Path) -> None:
+    """`rdeps` must detect importers whose import statement spans MULTIPLE
+    lines (the barrel/harness pattern). The line carrying the module path is
+    `} from './module';` — no leading import/export keyword — so the anchored
+    IMPORT_PATTERNS in `_is_import_of` missed it and rdeps reported ZERO
+    importers. Real incident: RevOpsAIFrontend server-test-harness.mjs (5
+    importing specs, rdeps said 'no project file imports'). Same bug class
+    as the deps multi-line barrel fix."""
+    lib = fixture_dir / "rdeps-barrel-lib.mjs"
+    lib.write_text("export function helper() { return 1; }\n")
+    consumer = fixture_dir / "rdeps-barrel-consumer.spec.mjs"
+    consumer.write_text(
+        "import {\n  helper,\n} from './rdeps-barrel-lib';\nconst v = helper();\n"
+    )
+    result = run(["codeq", "rdeps", str(lib), "-p", str(fixture_dir)], check=False)
+    assert "rdeps-barrel-consumer.spec.mjs" in result.stdout, (
+        f"rdeps missed the multi-line importer: {result.stdout}{result.stderr}"
+    )
 
 
 def test_codeq_map(fixture_dir: Path) -> None:
     """`map` = repo orientation: hottest files + symbols by reference weight,
     bounded output. Test files are excluded by default (--tests includes);
     --save persists to .memory-bank/topics/code-map.md only when a bank exists."""
-    (fixture_dir / "test_dummy.py").write_text(
-        "def noisy_helper():\n    return 1\n"
-    )
+    (fixture_dir / "test_dummy.py").write_text("def noisy_helper():\n    return 1\n")
     result = run(["codeq", "map", "-p", str(fixture_dir), "--top", "10", "--syms", "3"])
     assert "REPO MAP" in result.stdout, f"map header missing: {result.stdout}"
     assert "calc.py" in result.stdout, f"map missed calc.py: {result.stdout}"
@@ -116,7 +150,17 @@ def test_codeq_map(fixture_dir: Path) -> None:
         f"map must exclude test files by default: {result.stdout}"
     )
     with_tests = run(
-        ["codeq", "map", "-p", str(fixture_dir), "--top", "50", "--syms", "3", "--tests"]
+        [
+            "codeq",
+            "map",
+            "-p",
+            str(fixture_dir),
+            "--top",
+            "50",
+            "--syms",
+            "3",
+            "--tests",
+        ]
     )
     assert "test_dummy.py" in with_tests.stdout, (
         f"--tests must include test files: {with_tests.stdout}"
@@ -162,7 +206,9 @@ export class A {
         assert "[codeq] find sweep truncated" not in result.stderr, (
             f"small-tree find emitted spurious truncation notice: {result.stderr}"
         )
-        assert "a.ts" in result.stdout, f"find missed the broken-ctags method: {result.stdout}"
+        assert "a.ts" in result.stdout, (
+            f"find missed the broken-ctags method: {result.stdout}"
+        )
 
 
 def test_codeq_modular_layout() -> None:
@@ -180,7 +226,8 @@ def test_codeq_modular_layout() -> None:
         "tags",
     }
     missing = sorted(
-        name for name in expected_slices
+        name
+        for name in expected_slices
         if not (package / "features" / name / "command.py").is_file()
     )
     assert not missing, f"missing vertical slices: {missing}"
@@ -190,4 +237,6 @@ def test_codeq_modular_layout() -> None:
         for path in package.rglob("*.py")
         if len(path.read_text().splitlines()) > 250
     ]
-    assert not oversized, f"codeq modules exceeded the 250-line vertical-slice budget: {oversized}"
+    assert not oversized, (
+        f"codeq modules exceeded the 250-line vertical-slice budget: {oversized}"
+    )

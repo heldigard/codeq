@@ -16,6 +16,7 @@ from .test_codeq_core import (
     test_codeq_map,
     test_codeq_modular_layout,
     test_codeq_rdeps,
+    test_codeq_rdeps_multiline_importer,
     test_codeq_version_and_sweep_cap,
 )
 from .test_codeq_typescript import (
@@ -84,6 +85,10 @@ def main() -> int:
             (
                 lambda: test_codeq_rdeps(fixture_dir),
                 "  codeq (rdeps python + ts + self-exclusion): OK",
+            ),
+            (
+                lambda: test_codeq_rdeps_multiline_importer(fixture_dir),
+                "  codeq (rdeps multi-line importer / barrel): OK",
             ),
             (
                 lambda: test_codeq_map(fixture_dir),

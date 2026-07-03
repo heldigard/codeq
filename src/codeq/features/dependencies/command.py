@@ -189,6 +189,15 @@ def _is_import_of(text: str, key: str, lang: str) -> bool:
                 last = mod.rstrip("/").split("/")[-1]
                 last = re.sub(r"\.(js|mjs|cjs|jsx|ts|tsx)$", "", last)
                 return last == key
+        # Multi-line import closer: `} from './module';` carries the module
+        # path but no leading import/export keyword, so the anchored patterns
+        # above miss it — without this, rdeps reports zero importers for any
+        # barrel/harness module. Match the closer and compare the last segment.
+        m = re.search(r"\bfrom\s+['\"]([^'\"]+)['\"]", text)
+        if m:
+            last = m.group(1).rstrip("/").split("/")[-1]
+            last = re.sub(r"\.(js|mjs|cjs|jsx|ts|tsx)$", "", last)
+            return last == key
         return False
     if lang == "java":
         return (
