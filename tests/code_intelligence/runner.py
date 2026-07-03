@@ -21,6 +21,7 @@ from .test_codeq_core import (
 from .test_codeq_typescript import (
     test_codeq_deps_ts_multiline_barrel,
     test_codeq_deps_ts_reexports_and_dynamic,
+    test_codeq_refs_ts_filters_export_function_decl,
     test_codeq_refs_ts_filters_method_declaration,
     test_codeq_typescript,
     test_codeq_typescript_after_generic_field,
@@ -67,6 +68,10 @@ def main() -> int:
             (
                 lambda: test_codeq_refs_ts_filters_method_declaration(fixture_dir),
                 "  codeq (refs ts filter method decl): OK",
+            ),
+            (
+                lambda: test_codeq_refs_ts_filters_export_function_decl(fixture_dir),
+                "  codeq (refs ts filter export-function decl): OK",
             ),
             (
                 lambda: test_codeq_deps_ts_reexports_and_dynamic(fixture_dir),

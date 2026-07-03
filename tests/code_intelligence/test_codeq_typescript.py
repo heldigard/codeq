@@ -137,6 +137,31 @@ def test_codeq_refs_ts_filters_method_declaration(fixture_dir: Path) -> None:
     )
 
 
+def test_codeq_refs_ts_filters_export_function_decl(fixture_dir: Path) -> None:
+    """`refs` must NOT echo back a top-level `export function name(`
+    declaration as a reference. The def_re TS filter covered access-modifier
+    METHODS but missed the `function` keyword, so a plain function declaration
+    leaked as a fake call site (LLM reads it as a caller that isn't one)."""
+    lib = fixture_dir / "refs-func-lib.ts"
+    lib.write_text("export function computeValue(n: number): number { return n; }\n")
+    consumer = fixture_dir / "refs-func-consumer.ts"
+    consumer.write_text(
+        "import { computeValue } from './refs-func-lib';\n"
+        "export const x = computeValue(2);\n"
+    )
+    refs = run(
+        ["codeq", "refs", "computeValue", "-l", "typescript", "-p", str(fixture_dir)]
+    )
+    # Call site in consumer MUST appear.
+    assert "refs-func-consumer.ts" in refs.stdout, (
+        f"refs missed the call site: {refs.stdout}{refs.stderr}"
+    )
+    # The `export function` declaration line in lib MUST NOT appear.
+    assert "export function computeValue" not in refs.stdout, (
+        f"refs returned the `export function` declaration as a reference: {refs.stdout}"
+    )
+
+
 def test_codeq_deps_ts_reexports_and_dynamic(fixture_dir: Path) -> None:
     """`deps` must catch the full TS/JS import surface, not just plain
     `import x from 'x'` lines: re-exports (`export ... from 'x'`), wildcard

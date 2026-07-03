@@ -53,7 +53,7 @@ def cmd_refs(args: argparse.Namespace) -> int:
         def_re = _re.compile(
             r'^[ \t]*(?:export\s+)?(?:async\s+)?'
             r'(?:\s*(?:public|private|protected|static|abstract|override|readonly|async)\s+)*'
-            r"\*?\s*" + name_esc + r'\s*(?:<[^<>]*(?:<[^<>]*>[^<>]*)*>)?\s*\(',
+            r'(?:function\s+)?\*?\s*' + name_esc + r'\s*(?:<[^<>]*(?:<[^<>]*>[^<>]*)*>)?\s*\(',
             re.MULTILINE,
         )
     else:
