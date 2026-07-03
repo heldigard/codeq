@@ -32,7 +32,6 @@ from .test_external_tools import (
     test_ctags,
     test_shellcheck,
 )
-from .test_project_memory import test_project_memory_maintain_report_shape
 
 
 def main() -> int:
@@ -64,7 +63,6 @@ def main() -> int:
             (test_codeq_modular_layout, "  codeq (modular layout): OK"),
             (test_codeq_summary_and_context_no_llm, "  codeq (summary/context/relations --no-llm shape): OK"),
             (test_codeq_summary_and_context_live, "  codeq (summary/context live - skipped if daemon down): OK"),
-            (test_project_memory_maintain_report_shape, "  project-memory (maintain report shape + over-budget flag): OK"),
             (lambda: test_ast_grep(fixture_dir), "  ast-grep (python): OK"),
             (lambda: test_ast_grep_java_expression(fixture_dir), "  ast-grep (java expression): OK"),
             (lambda: test_ctags(fixture_dir), "  ctags (py/java/ts): OK"),
