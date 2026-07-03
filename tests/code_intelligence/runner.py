@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import tempfile
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from .test_codeq_context import (
 from .test_codeq_core import (
     test_codeq,
     test_codeq_class,
+    test_codeq_def_filter_re,
     test_codeq_doctor,
     test_codeq_java,
     test_codeq_map,
@@ -100,6 +102,10 @@ def main() -> int:
                 "  codeq (--version + sweep cap silent): OK",
             ),
             (test_codeq_modular_layout, "  codeq (modular layout): OK"),
+            (
+                test_codeq_def_filter_re,
+                "  codeq (refs def-filter regex per lang): OK",
+            ),
             (test_codeq_doctor, "  codeq (doctor): OK"),
             (
                 test_codeq_summary_and_context_no_llm,
@@ -124,3 +130,10 @@ def main() -> int:
 
     print("\nall code-intelligence checks passed")
     return 0
+
+
+if __name__ == "__main__":
+    # `python3 -m tests.code_intelligence.runner` — the documented end-to-end
+    # smoke. Without this guard the module imported silently and main() never
+    # ran (the command printed nothing and exited 0).
+    sys.exit(main())

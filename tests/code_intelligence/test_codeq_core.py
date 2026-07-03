@@ -261,3 +261,28 @@ def test_codeq_modular_layout() -> None:
     assert not oversized, (
         f"codeq modules exceeded the 250-line vertical-slice budget: {oversized}"
     )
+
+
+def test_codeq_def_filter_re() -> None:
+    """`_def_filter_re` (extracted from cmd_refs) isolates DECLARATION lines
+    from call sites, per language. Locks the most-tuned regex in codeq so the
+    extraction didn't change behavior."""
+    from codeq.features.references.command import _def_filter_re
+
+    py = _def_filter_re("python", "foo")
+    assert py.search("def foo(x):")
+    assert not py.search("result = foo(x)")
+
+    ts = _def_filter_re("typescript", "foo")
+    assert ts.search("  foo(): void {")
+    assert ts.search("function foo() {")
+    assert not ts.search("    return this.foo()")
+
+    ja = _def_filter_re("java", "foo")
+    assert ja.search("public void foo() {")
+    assert not ja.search("        foo()")
+
+    go = _def_filter_re("go", "foo")
+    assert go.search("func foo() {")
+    assert not go.search("    foo()")
+
