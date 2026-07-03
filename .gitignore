@@ -12,3 +12,5 @@ dist/
 .coverage
 htmlcov/
 .memory-bank/
+# Local Claude Code harness artifacts (auto-setup marker, orchestrator registry)
+.claude/
