@@ -43,6 +43,15 @@ TOOLS: list[dict[str, object]] = [
         },
     },
     {
+        "name": "shfmt",
+        "importance": "optional",
+        "why": "shell format (companion to shellcheck)",
+        "managers": {
+            "brew": "brew install shfmt",
+            "go": "go install mvdan.cc/sh/v3/cmd/shfmt@latest",
+        },
+    },
+    {
         "name": "rg",
         "importance": "optional",
         "why": "speeds up refs/rdeps (pure-Python walker used otherwise)",
