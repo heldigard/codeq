@@ -101,10 +101,8 @@ def _sig_from_raw(raw: str, lang: str) -> str:
     """Header line(s) only. Python: stop at the line ENDING with ':' (the `):`
     of a multi-line sig, or the `:` of a single-line def — NOT an annotation
     colon mid-line). Brace-langs: stop at the line opening the body `{`."""
-    if lang == "python":
-        stop = lambda ln: ln.rstrip().endswith(":")
-    else:
-        stop = lambda ln: "{" in ln
+    def stop(ln: str) -> bool:
+        return ln.rstrip().endswith(":") if lang == "python" else "{" in ln
     out: list[str] = []
     for ln in raw.splitlines():
         out.append(ln)

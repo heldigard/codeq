@@ -11,3 +11,4 @@ dist/
 .tags
 .coverage
 htmlcov/
+.memory-bank/

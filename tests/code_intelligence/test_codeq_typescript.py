@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from .helpers import run
 
 
@@ -107,8 +109,8 @@ def test_codeq_refs_ts_filters_method_declaration(fixture_dir: Path) -> None:
     )
     # The declaration line in service.ts must NOT appear.
     decl_lines = [
-        l for l in refs.stdout.splitlines()
-        if str(service) in l and "protected onMessagesScroll" in l
+        line for line in refs.stdout.splitlines()
+        if str(service) in line and "protected onMessagesScroll" in line
     ]
     assert not decl_lines, (
         f"refs returned the TS method declaration line as a 'reference': {decl_lines}\n"

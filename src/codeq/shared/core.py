@@ -3,10 +3,11 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 from codeq.shared.config import EXT_LANG
 
-def die(msg: str, code: int = 2) -> None:
+def die(msg: str, code: int = 2) -> NoReturn:
     print(f"codeq: {msg}", file=sys.stderr)
     sys.exit(code)
 

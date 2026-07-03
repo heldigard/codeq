@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -62,9 +63,9 @@ def cmd_find(args: argparse.Namespace) -> int:
                     if any(path.match(g) for g in CACHE_GLOBS):
                         continue
                     files_seen += 1
-                    ln = _locate_line(str(path), args.name)
-                    if ln:
-                        hits.append((str(path), ln, "method", args.name))
+                    located_line = _locate_line(str(path), args.name)
+                    if located_line:
+                        hits.append((str(path), located_line, "method", args.name))
             except OSError:
                 pass  # unreadable path — silently skip; ctags output was the primary source
     if not hits:
@@ -101,7 +102,7 @@ def cmd_outline(args: argparse.Namespace) -> int:
     # for normal member outlines and the regex is declaration-level only.
     n_methods = sum(1 for _, k, _ in rows if k == "method")
     try:
-        lang = lang_of(args.file, None)
+        lang: str | None = lang_of(args.file, None)
     except SystemExit:
         lang = None
     if lang in ("typescript", "javascript") or (n_methods == 0 and lang == "java"):

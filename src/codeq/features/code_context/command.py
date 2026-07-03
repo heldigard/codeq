@@ -166,7 +166,7 @@ def cmd_relations(args: argparse.Namespace) -> int:
         _maybe_emit_summary(args.file, args.name, raw)
     _print_section("Signature")
     print(sig)
-    _print_section(f"Internal call hints (from method body, regex)")
+    _print_section("Internal call hints (from method body, regex)")
     calls = _body_call_hints(raw, exclude_name=args.name)
     if calls:
         for c in calls:
