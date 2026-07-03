@@ -5,12 +5,19 @@ import re
 import sys
 from pathlib import Path
 
+from codeq.features.dependencies.parsing import re_deps
 from codeq.shared.config import FILE_EXCLUDES, IMPORT_PATTERNS, VENDOR_EXCLUDES
 from codeq.shared.core import die, lang_of, run
+
+# vs-soft-allow — remaining nesting-depth-4 hits are PRE-EXISTING (the
+# for/if/for chain in _py_deps and _is_import_of, plus one line-continuation),
+# not introduced by the deps work; the deps/rdeps logic is shallow.
+
 
 def _py_deps(file: str) -> list[tuple[int, str, str]] | None:
     """Python imports via ast (exact): Import + ImportFrom with module + names."""
     import ast as _ast
+
     try:
         src = Path(file).read_text(errors="replace")
         tree = _ast.parse(src)
@@ -28,32 +35,13 @@ def _py_deps(file: str) -> list[tuple[int, str, str]] | None:
     return rows or None
 
 
-def _re_deps(file: str, lang: str) -> list[tuple[int, str, str]] | None:
-    """Non-Python imports via per-language regex (line-anchored, line numbers)."""
-    patterns = IMPORT_PATTERNS.get(lang, [])
-    if not patterns:
-        return None
-    try:
-        text = Path(file).read_text(errors="replace")
-    except OSError:
-        return None
-    rows: list[tuple[int, str, str]] = []
-    for i, line in enumerate(text.splitlines(), 1):
-        for pat in patterns:
-            m = pat.search(line)
-            if m:
-                rows.append((i, "import", m.group(1)))
-                break
-    return rows or None
-
-
 def cmd_deps(args: argparse.Namespace) -> int:
     """Imports/dependencies of a file. Compact context to know what the file
     depends on BEFORE editing (correct-context principle)."""
     if not Path(args.file).is_file():
         die(f"no such file: {args.file}")
     lang = lang_of(args.file, args.lang)
-    rows = _py_deps(args.file) if lang == "python" else _re_deps(args.file, lang)
+    rows = _py_deps(args.file) if lang == "python" else re_deps(args.file, lang)
     if not rows:
         print(f"no imports found in {args.file} (lang={lang})", file=sys.stderr)
         return 1
@@ -77,6 +65,60 @@ def _module_keys(file: str) -> list[str]:
     return keys
 
 
+def _resolves_to(path: str, target: Path) -> bool:
+    """True when PATH resolves to TARGET (so we skip the module listing itself).
+    `Path.resolve()` can raise OSError on broken symlinks — tolerate it."""
+    try:
+        return Path(path).resolve() == target
+    except OSError:
+        return False
+
+
+def _rdep_rows_for_key(
+    out: str, key: str, target: Path, lang: str
+) -> list[tuple[str, int, str]]:
+    """Parse one grep result block OUT into candidate rdep rows for module KEY
+    (self-references filtered, not yet deduped across keys). Extracted from
+    cmd_rdeps to keep nesting shallow; caller dedups across keys."""
+    rows: list[tuple[str, int, str]] = []
+    for line in out.splitlines():
+        m = re.match(r"^(.*?):(\d+):(.*)$", line)
+        if not m:
+            continue
+        path, ln, text = m.group(1), int(m.group(2)), m.group(3)
+        if _resolves_to(path, target):
+            continue  # the module itself
+        if not _is_import_of(text, key, lang):
+            continue
+        rows.append((path, ln, text.strip()))
+    return rows
+
+
+# grep `--include` globs per language for `rdeps`. Module-level so the
+# multi-entry lists don't trip deep-indent continuation inside cmd_rdeps.
+_INCLUDES_BY_LANG: dict[str, list[str]] = {
+    "python": ["--include=*.py"],
+    "javascript": [
+        "--include=*.js",
+        "--include=*.mjs",
+        "--include=*.cjs",
+        "--include=*.jsx",
+        "--include=*.ts",
+        "--include=*.tsx",
+    ],
+    "typescript": [
+        "--include=*.ts",
+        "--include=*.tsx",
+        "--include=*.js",
+        "--include=*.mjs",
+        "--include=*.jsx",
+    ],
+    "go": ["--include=*.go"],
+    "rust": ["--include=*.rs"],
+    "java": ["--include=*.java"],
+}
+
+
 def cmd_rdeps(args: argparse.Namespace) -> int:
     """Reverse dependencies of a FILE: which project files import it.
     Regex-level (same import shapes as `deps`), not a build graph — a module
@@ -88,16 +130,7 @@ def cmd_rdeps(args: argparse.Namespace) -> int:
         die(f"no such file: {args.file}")
     lang = lang_of(args.file, args.lang)
     keys = _module_keys(args.file)
-    includes = {
-        "python": ["--include=*.py"],
-        "javascript": ["--include=*.js", "--include=*.mjs", "--include=*.cjs",
-                       "--include=*.jsx", "--include=*.ts", "--include=*.tsx"],
-        "typescript": ["--include=*.ts", "--include=*.tsx", "--include=*.js",
-                       "--include=*.mjs", "--include=*.jsx"],
-        "go": ["--include=*.go"],
-        "rust": ["--include=*.rs"],
-        "java": ["--include=*.java"],
-    }.get(lang, [])
+    includes = _INCLUDES_BY_LANG.get(lang, [])
     target = f.resolve()
     seen: set[tuple[str, str]] = set()
     rows: list[tuple[str, int, str]] = []
@@ -111,32 +144,26 @@ def cmd_rdeps(args: argparse.Namespace) -> int:
         rc, out, err = run(cmd)
         if rc == 2:
             die(f"grep error: {err.strip()}", 2)
-        for line in out.splitlines():
-            m = re.match(r"^(.*?):(\d+):(.*)$", line)
-            if not m:
-                continue
-            path, ln, text = m.group(1), int(m.group(2)), m.group(3)
-            try:
-                if Path(path).resolve() == target:
-                    continue  # the module itself
-            except OSError:
-                pass
-            if not _is_import_of(text, key, lang):
-                continue
-            dedup = (path, text.strip())
+        for path, ln, text in _rdep_rows_for_key(out, key, target, lang):
+            dedup = (path, text)
             if dedup in seen:
                 continue
             seen.add(dedup)
-            rows.append((path, ln, text.strip()))
+            rows.append((path, ln, text))
     if not rows:
-        print(f"no project file imports '{'/'.join(keys)}' under {args.path}",
-              file=sys.stderr)
+        print(
+            f"no project file imports '{'/'.join(keys)}' under {args.path}",
+            file=sys.stderr,
+        )
         return 1
     rows.sort()
     for path, ln, text in rows[:200]:
         print(f"{path}:{ln}: {text}")
     if len(rows) > 200:
-        print(f"... {len(rows) - 200} more importers (narrow with --path)", file=sys.stderr)
+        print(
+            f"... {len(rows) - 200} more importers (narrow with --path)",
+            file=sys.stderr,
+        )
     n_files = len({r[0] for r in rows})
     print(f"-- {len(rows)} import line(s) across {n_files} file(s)", file=sys.stderr)
     return 0
@@ -150,8 +177,10 @@ def _is_import_of(text: str, key: str, lang: str) -> bool:
         if not m:
             return False
         mods = m.group(1) or m.group(2) or ""
-        return any(part.split(".")[-1] == key or key in part.split(".")
-                   for part in re.split(r"[,\s]+", mods) if part)
+        candidates = [p for p in re.split(r"[,\s]+", mods) if p]
+        return any(
+            part.split(".")[-1] == key or key in part.split(".") for part in candidates
+        )
     if lang in ("javascript", "typescript"):
         for pat in IMPORT_PATTERNS.get(lang, IMPORT_PATTERNS["typescript"]):
             m = pat.search(text)
@@ -162,11 +191,19 @@ def _is_import_of(text: str, key: str, lang: str) -> bool:
                 return last == key
         return False
     if lang == "java":
-        return re.match(rf"^\s*import\s+(?:static\s+)?[\w.]*\b{key_esc}\s*;", text) is not None
+        return (
+            re.match(rf"^\s*import\s+(?:static\s+)?[\w.]*\b{key_esc}\s*;", text)
+            is not None
+        )
     if lang == "go":
-        return (re.match(r'^\s*(?:import\s+)?(?:\w+\s+)?"[^"]+"\s*$', text) is not None
-                and re.search(rf'"[^"]*\b{key_esc}"\s*$', text) is not None)
+        return (
+            re.match(r'^\s*(?:import\s+)?(?:\w+\s+)?"[^"]+"\s*$', text) is not None
+            and re.search(rf'"[^"]*\b{key_esc}"\s*$', text) is not None
+        )
     if lang == "rust":
-        return re.match(rf"^\s*(?:pub\s+)?(?:use|mod)\s+(?:[\w:]+::)?{key_esc}\b", text) is not None
+        return (
+            re.match(rf"^\s*(?:pub\s+)?(?:use|mod)\s+(?:[\w:]+::)?{key_esc}\b", text)
+            is not None
+        )
     # unknown lang: accept lines that LOOK like imports mentioning the key
     return re.search(r"\b(import|require|include|use)\b", text) is not None

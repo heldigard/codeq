@@ -19,6 +19,7 @@ from .test_codeq_core import (
     test_codeq_version_and_sweep_cap,
 )
 from .test_codeq_typescript import (
+    test_codeq_deps_ts_multiline_barrel,
     test_codeq_deps_ts_reexports_and_dynamic,
     test_codeq_refs_ts_filters_method_declaration,
     test_codeq_typescript,
@@ -53,18 +54,54 @@ def main() -> int:
             (lambda: test_codeq_java(fixture_dir), "  codeq (java): OK"),
             (lambda: test_codeq_class(fixture_dir), "  codeq (class): OK"),
             (lambda: test_codeq_typescript(fixture_dir), "  codeq (typescript): OK"),
-            (lambda: test_codeq_typescript_after_generic_field(fixture_dir), "  codeq (typescript after generic-arg field): OK"),
-            (lambda: test_codeq_typescript_outline_after_partial_ctags_hit(fixture_dir), "  codeq (typescript mixed ctags/regex outline): OK"),
-            (lambda: test_codeq_refs_ts_filters_method_declaration(fixture_dir), "  codeq (refs ts filter method decl): OK"),
-            (lambda: test_codeq_deps_ts_reexports_and_dynamic(fixture_dir), "  codeq (deps ts reexports + dynamic + commonjs): OK"),
-            (lambda: test_codeq_rdeps(fixture_dir), "  codeq (rdeps python + ts + self-exclusion): OK"),
-            (lambda: test_codeq_map(fixture_dir), "  codeq (map ranking + test-exclusion + --save): OK"),
-            (test_codeq_version_and_sweep_cap, "  codeq (--version + sweep cap silent): OK"),
+            (
+                lambda: test_codeq_typescript_after_generic_field(fixture_dir),
+                "  codeq (typescript after generic-arg field): OK",
+            ),
+            (
+                lambda: test_codeq_typescript_outline_after_partial_ctags_hit(
+                    fixture_dir
+                ),
+                "  codeq (typescript mixed ctags/regex outline): OK",
+            ),
+            (
+                lambda: test_codeq_refs_ts_filters_method_declaration(fixture_dir),
+                "  codeq (refs ts filter method decl): OK",
+            ),
+            (
+                lambda: test_codeq_deps_ts_reexports_and_dynamic(fixture_dir),
+                "  codeq (deps ts reexports + dynamic + commonjs): OK",
+            ),
+            (
+                lambda: test_codeq_deps_ts_multiline_barrel(fixture_dir),
+                "  codeq (deps ts multi-line barrel + named imports): OK",
+            ),
+            (
+                lambda: test_codeq_rdeps(fixture_dir),
+                "  codeq (rdeps python + ts + self-exclusion): OK",
+            ),
+            (
+                lambda: test_codeq_map(fixture_dir),
+                "  codeq (map ranking + test-exclusion + --save): OK",
+            ),
+            (
+                test_codeq_version_and_sweep_cap,
+                "  codeq (--version + sweep cap silent): OK",
+            ),
             (test_codeq_modular_layout, "  codeq (modular layout): OK"),
-            (test_codeq_summary_and_context_no_llm, "  codeq (summary/context/relations --no-llm shape): OK"),
-            (test_codeq_summary_and_context_live, "  codeq (summary/context live - skipped if daemon down): OK"),
+            (
+                test_codeq_summary_and_context_no_llm,
+                "  codeq (summary/context/relations --no-llm shape): OK",
+            ),
+            (
+                test_codeq_summary_and_context_live,
+                "  codeq (summary/context live - skipped if daemon down): OK",
+            ),
             (lambda: test_ast_grep(fixture_dir), "  ast-grep (python): OK"),
-            (lambda: test_ast_grep_java_expression(fixture_dir), "  ast-grep (java expression): OK"),
+            (
+                lambda: test_ast_grep_java_expression(fixture_dir),
+                "  ast-grep (java expression): OK",
+            ),
             (lambda: test_ctags(fixture_dir), "  ctags (py/java/ts): OK"),
             (test_codeq_excludes_vendor, "  codeq (vendor-exclude find/refs/tags): OK"),
             (test_shellcheck, "  shellcheck: OK"),
