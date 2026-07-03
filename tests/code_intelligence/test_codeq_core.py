@@ -137,6 +137,27 @@ def test_codeq_rdeps_multiline_importer(fixture_dir: Path) -> None:
     )
 
 
+def test_codeq_doctor() -> None:
+    """`doctor` reports each external binary (OK/MISSING + version), never
+    installs without --install, and exits 0 when all REQUIRED binaries are
+    present (rg/ollama are optional)."""
+    result = run(["codeq", "doctor"], check=False)
+    assert "codeq dependency check" in result.stdout, (
+        f"doctor header missing: {result.stdout}"
+    )
+    assert "ctags" in result.stdout, (
+        f"doctor must list ctags (required): {result.stdout}"
+    )
+    # without --install it must NOT attempt installs
+    assert "installing" not in result.stderr, (
+        f"doctor installed without --install: {result.stderr}"
+    )
+    # required binaries present → exit 0 (CI/local has ctags + ast-grep)
+    assert result.returncode == 0, (
+        f"doctor should exit 0 when required binaries present: {result.stdout}"
+    )
+
+
 def test_codeq_map(fixture_dir: Path) -> None:
     """`map` = repo orientation: hottest files + symbols by reference weight,
     bounded output. Test files are excluded by default (--tests includes);

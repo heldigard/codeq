@@ -12,6 +12,7 @@ from .test_codeq_context import (
 from .test_codeq_core import (
     test_codeq,
     test_codeq_class,
+    test_codeq_doctor,
     test_codeq_java,
     test_codeq_map,
     test_codeq_modular_layout,
@@ -99,6 +100,7 @@ def main() -> int:
                 "  codeq (--version + sweep cap silent): OK",
             ),
             (test_codeq_modular_layout, "  codeq (modular layout): OK"),
+            (test_codeq_doctor, "  codeq (doctor): OK"),
             (
                 test_codeq_summary_and_context_no_llm,
                 "  codeq (summary/context/relations --no-llm shape): OK",
