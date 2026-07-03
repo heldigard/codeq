@@ -43,3 +43,6 @@ Issues = "https://github.com/heldigard/codeq/issues"
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-q"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/codeq"]
