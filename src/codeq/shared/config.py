@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 CTAGS = "ctags"
 ASTGREP = "ast-grep"  # resolved on PATH (~~/.local/bin/ast-grep)
@@ -88,27 +87,9 @@ _METHOD_LOCATOR: dict[str, str] = {
 }
 
 
-def _regex_locate_method(file: str, name: str, lang: str) -> int | None:
-    """Regex-based fallback locator for brace-lang class methods when ctags
-    misses them. Returns the 1-based line of the first signature match
-    (preferring indented / in-class hits over top-level hits), or None."""
-    pat_tpl = _METHOD_LOCATOR.get(lang)
-    if not pat_tpl:
-        return None
-    rx = re.compile(pat_tpl.format(name=re.escape(name)), re.MULTILINE)
-    try:
-        text = Path(file).read_text(errors="replace")
-    except OSError:
-        return None
-    indented_hit: int | None = None
-    lines = text.splitlines()
-    for m in rx.finditer(text):
-        line_no = text.count("\n", 0, m.start()) + 1
-        if line_no - 1 < len(lines) and lines[line_no - 1].startswith((" ", "\t")):
-            return line_no  # class body — preferred
-        if indented_hit is None:
-            indented_hit = line_no
-    return indented_hit
+# NOTE: `_regex_locate_method` (the consumer of `_METHOD_LOCATOR`) lives in
+# `shared/locators.py` — single source of truth. Do NOT re-add a copy here; the
+# previous duplicate drifted (config's copy was dead, locators' was live).
 
 # ast-grep class/type patterns for the `class` subcommand (AST-exact where the
 # parser supports it — TS/JS). Java/Go/Rust fall back to brace-count from the

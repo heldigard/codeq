@@ -127,8 +127,13 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         f"codeq dependency check (platform: {platform.system()} {platform.machine()})"
     )
     required_missing: list[dict[str, object]] = []
+    # Detect each binary ONCE; reuse the result for the report, the required
+    # check, and the missing-summary (a previous version re-ran `_detect` in a
+    # list comprehension, spawning `--version` twice per tool).
+    detected: list[tuple[dict[str, object], str | None]] = []
     for tool in TOOLS:
         path, ver = _detect(str(tool["name"]))
+        detected.append((tool, path))
         status = "OK" if path else "MISSING"
         imp = str(tool["importance"])
         detail = ver or "(no version)"
@@ -137,7 +142,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             required_missing.append(tool)
         if not path and args.install:
             print(f"  -> {_try_install(tool)}")
-    missing_any = [t for t in TOOLS if not _detect(str(t["name"]))[0]]
+    missing_any = [t for (t, path) in detected if not path]
     if missing_any and not args.install:
         print("\nmissing binaries — install hints:")
         for tool in missing_any:
