@@ -105,7 +105,7 @@ def _no_body_error(file: str, name: str, lang: str, action: str) -> int:
     if ln:
         print(f"{file}:{ln}", file=sys.stderr)
         print(
-            f"(no exact body extractor for {lang}; "
+            f"(no exact body extractor to {action} for {lang}; "
             f"try: codeq outline {file} to list symbols, "
             f"or codeq sig {name} {file} for signature only)",
             file=sys.stderr,

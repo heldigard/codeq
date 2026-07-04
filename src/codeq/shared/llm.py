@@ -46,7 +46,7 @@ def _llm_status(no_llm: bool = False) -> tuple[bool, str, str]:
     if no_llm or os.environ.get("CODEQ_NO_LLM"):
         return (False, "", "CODEQ_NO_LLM=1 / --no-llm")
     try:
-        import ollama_client  # type: ignore[import-not-found]
+        import ollama_client
     except (ImportError, ModuleNotFoundError):
         return (False, "", "ollama_client not importable (run from this host?)")
     try:
@@ -87,7 +87,7 @@ def _summarize_code(
     ok, model, reason = _llm_status(no_llm=no_llm)
     if not ok:
         return (None, reason, 0.0)
-    import ollama_client  # type: ignore[import-not-found]
+    import ollama_client
     import time as _time
 
     # Truncate to keep the small model focused on the signature + first ~2.5KB.

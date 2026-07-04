@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any
 
 from codeq.shared.config import CTAGS, _METHOD_LOCATOR, _RESERVED_KEYWORDS
 from codeq.shared.core import _parse_ctags_line, lang_of, run
@@ -81,7 +82,9 @@ def _regex_outline_methods(
     return out
 
 
-def _try_outline_match(m, ctx, skip_names):
+def _try_outline_match(
+    m: re.Match[str], ctx: dict[str, Any], skip_names: set[str]
+) -> tuple[int, str, str] | None:
     """Process one regex match for _regex_outline_methods. Returns (line, name) or None."""
     line_no = ctx["text"].count("\n", 0, m.start()) + 1
     if line_no - 1 >= len(ctx["lines"]) or ctx["depths"][line_no - 1] != 1:
@@ -143,5 +146,10 @@ def _locate_line(file: str, name: str, kinds: set[str] | None = None) -> int | N
     except SystemExit:
         return None
     if lang in ("typescript", "javascript", "java"):
+        if lang == "java":
+            from codeq.shared.lombok import detect_lombok_members
+            for m in detect_lombok_members(file):
+                if m.name == name:
+                    return m.line
         return _regex_locate_method(file, name, lang)
     return None

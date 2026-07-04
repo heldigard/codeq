@@ -12,7 +12,7 @@ import io
 import json
 import sys
 from contextlib import redirect_stderr, redirect_stdout
-from typing import Any
+from typing import Any, Callable
 
 
 def emit_json(data: dict[str, Any], exit_code: int) -> int:
@@ -82,14 +82,16 @@ def _rdeps_json(args: argparse.Namespace) -> int:
 
 
 # Commands with structured JSON support via pure functions.
-_STRUCTURED_HANDLERS: dict[str, Any] = {
+_STRUCTURED_HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "refs": _refs_json,
     "deps": _deps_json,
     "rdeps": _rdeps_json,
 }
 
 
-def _capture_cmd_output(func, args: argparse.Namespace) -> tuple[int, str, str]:
+def _capture_cmd_output(
+    func: Callable[[argparse.Namespace], int], args: argparse.Namespace
+) -> tuple[int, str, str]:
     """Execute func(args) with stdout/stderr captured. Returns (exit_code, stdout, stderr)."""
     out_buf, err_buf = io.StringIO(), io.StringIO()
     try:

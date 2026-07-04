@@ -389,3 +389,35 @@ def test_codeq_module_entry_point() -> None:
     result = run(["python3", "-m", "codeq", "--version"], check=False)
     assert result.returncode == 0, f"python -m codeq --version failed: {result.stderr}"
     assert "codeq" in result.stdout, f"unexpected output: {result.stdout}"
+
+
+def test_outline_regex_line_number_after_blank(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Regression: the brace-lang outline regex's type group spans newlines
+    (\\s in the char class), so when a method is preceded by a blank line the
+    whole match anchored at the blank line and `line_no` pointed there. For TS
+    this mis-numbered the method; for Java (no `:Type` return syntax) the
+    modifier/return checks read the blank line and DROPPED the method entirely.
+    Fix: derive line_no from m.start(1) (the captured name = real method line)."""
+    from codeq.shared.locators import _regex_outline_methods
+
+    # TS: method on line 3, blank line on line 2.
+    ts = tmp_path / "s.ts"
+    ts.write_text(
+        "export class S {\n\n  public getCurrent(): string {\n    return 'x';\n  }\n}\n"
+    )
+    hits = {h[2]: h[0] for h in _regex_outline_methods(str(ts), "typescript", set())}
+    assert "getCurrent" in hits, f"TS outline missed getCurrent: {hits}"
+    assert hits["getCurrent"] == 3, (
+        f"TS method mis-numbered (blank-line anchor bug): {hits}"
+    )
+
+    # Java: public method after a blank line must be found (was dropped).
+    ja = tmp_path / "S.java"
+    ja.write_text(
+        "package x;\npublic class S {\n\n"
+        "    public String getName() {\n        return \"x\";\n    }\n}\n"
+    )
+    jhits = {h[2] for h in _regex_outline_methods(str(ja), "java", set())}
+    assert "getName" in jhits, (
+        f"Java outline dropped public method after blank line: {jhits}"
+    )

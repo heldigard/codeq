@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Iterator
 
 from codeq.shared.config import FILE_EXCLUDES, VENDOR_EXCLUDES
 
@@ -123,7 +124,7 @@ def _py_search_file(f: Path, inc_globs: list[str], rx: re.Pattern[str]) -> list[
     ]
 
 
-def _walk_files(root: Path):
+def _walk_files(root: Path) -> Iterator[Path]:
     """Yield project files under ROOT, pruning VENDOR_EXCLUDES dirs in-place
     and FILE_EXCLUDES file globs."""
     for dirpath, dirnames, filenames in os.walk(root):

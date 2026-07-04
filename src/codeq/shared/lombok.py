@@ -86,9 +86,12 @@ _LOGGER_ANNOTATIONS = {
 }
 
 # Field regex: matches `private Type name;` or `private Type name = value;`
-# with optional annotations before the field.
+# with optional annotations before the field. The leading negative lookahead
+# rejects package/import declarations — a single-segment `package x;` would
+# otherwise match (type=`package`, name=`x`) and pollute every file.
 _FIELD_RE = re.compile(
-    r"^[ \t]*(?:@\w+(?:\([^)]*\))?\s+)*"  # optional annotations
+    r"^(?![ \t]*(?:package|import)\b)"  # NOT a package/import declaration
+    r"[ \t]*(?:@\w+(?:\([^)]*\))?\s+)*"  # optional annotations
     r"(?:private|protected|public)?\s*"
     r"(?:final\s+)?"
     r"([\w<>\[\],\s?]+?)\s+"  # type (group 1)
@@ -114,7 +117,7 @@ def _is_static_field(text: str, match: re.Match[str]) -> bool:
     # Skip annotation prefix: anything before the access modifier or type.
     # The declaration starts at the first non-annotation token.
     decl = re.sub(r"^[ \t]*(?:@\w+(?:\([^)]*\))?\s+)*", "", full)
-    return "static" in decl
+    return re.search(r"\bstatic\b", decl) is not None
 
 
 def _extract_fields(text: str) -> list[tuple[int, str, str]]:
@@ -179,8 +182,38 @@ def _is_final_field(text: str, field_name: str) -> bool:
     )
 
 
+def _mk(line: int, kind: str, name: str, sig: str, src: str) -> LombokMember:
+    """Build a LombokMember positionally. Single-line call sites keep the
+    inference loops at nesting ≤ 3 — the multi-line LombokMember(...) calls
+    pushed continuation indent past the vertical-slice guard's depth limit."""
+    return LombokMember(line, kind, name, sig, src)
+
+
+def _ann_line(ctx: LombokContext, *keys: str) -> int:
+    """First annotation line among KEYS present on the class, else class line.
+
+    Replaces the nested ctx.ann_lines.get(k1, ctx.ann_lines.get(k2, ...))
+    chains scattered across the inference helpers (shorter + DRY)."""
+    for k in keys:
+        if k in ctx.ann_lines:
+            return ctx.ann_lines[k]
+    return ctx.class_line
+
+
+# Fixed Lombok-generated signatures (kept as constants so _mk call sites stay
+# single-line and under the line-length limit).
+_EQ_SIG = "public boolean equals(Object o)"
+_HC_SIG = "public int hashCode()"
+_TS_SIG = "public String toString()"
+
+
 def _infer_getters(ctx: LombokContext) -> list[LombokMember]:
-    """Infer getter methods from @Getter annotation or @Data/@Value."""
+    """Infer getter methods from @Getter or @Data/@Value.
+
+    Primitive boolean → isFoo(); every other type (incl. Boolean wrapper) →
+    getFoo(). Lombok generates isX only for the primitive boolean, never the
+    Boolean wrapper — emitting both was a false positive that misled callers
+    into navigating a method absent from the compiled class."""
     has_class = (
         "@Getter" in ctx.class_anns
         or "@Data" in ctx.class_anns
@@ -191,24 +224,17 @@ def _infer_getters(ctx: LombokContext) -> list[LombokMember]:
         has_field = "@Getter" in ctx.field_anns.get(fname, set())
         if not (has_class or has_field):
             continue
-        getter = f"get{_camel_to_pascal(fname)}"
-        ann = ctx.ann_lines.get(
-            "@Getter", ctx.ann_lines.get("@Data", ctx.ann_lines.get("@Value", line))
-        )
+        prefix = "is" if ftype == "boolean" else "get"
+        getter = f"{prefix}{_camel_to_pascal(fname)}"
+        ann = _ann_line(ctx, "@Getter", "@Data", "@Value") if has_class else line
         src = "@Getter" if has_field else "@Data"
-        members.append(
-            LombokMember(ann, "method", getter, f"public {ftype} {getter}()", src)
-        )
-        if ftype in ("boolean", "Boolean"):
-            is_name = f"is{_camel_to_pascal(fname)}"
-            members.append(
-                LombokMember(ann, "method", is_name, f"public {ftype} {is_name}()", src)
-            )
+        sig = f"public {ftype} {getter}()"
+        members.append(_mk(ann, "method", getter, sig, src))
     return members
 
 
 def _infer_setters(ctx: LombokContext) -> list[LombokMember]:
-    """Infer setter methods from @Setter annotation or @Data."""
+    """Infer setter methods from @Setter or @Data (skipping final fields)."""
     has_class = "@Setter" in ctx.class_anns or (
         "@Data" in ctx.class_anns and "@Value" not in ctx.class_anns
     )
@@ -217,12 +243,13 @@ def _infer_setters(ctx: LombokContext) -> list[LombokMember]:
         if _is_final_field(ctx.text, fname):
             continue
         has_field = "@Setter" in ctx.field_anns.get(fname, set())
-        if has_class or has_field:
-            setter = f"set{_camel_to_pascal(fname)}"
-            ann = ctx.ann_lines.get("@Setter", ctx.ann_lines.get("@Data", line))
-            sig = f"public void {setter}({ftype} {fname})"
-            src = "@Setter" if has_field else "@Data"
-            members.append(LombokMember(ann, "method", setter, sig, src))
+        if not (has_class or has_field):
+            continue
+        setter = f"set{_camel_to_pascal(fname)}"
+        ann = _ann_line(ctx, "@Setter", "@Data") if has_class else line
+        sig = f"public void {setter}({ftype} {fname})"
+        src = "@Setter" if has_field else "@Data"
+        members.append(_mk(ann, "method", setter, sig, src))
     return members
 
 
@@ -231,96 +258,52 @@ def _final_fields(ctx: LombokContext) -> list[tuple[str, str]]:
 
 
 def _infer_constructors(ctx: LombokContext) -> list[LombokMember]:
-    """Infer constructors from @RequiredArgsConstructor/@AllArgsConstructor/@NoArgsConstructor/@Data."""
+    """Infer constructors from @RequiredArgsConstructor / @AllArgsConstructor /
+    @NoArgsConstructor / @Data."""
     members: list[LombokMember] = []
+    cls = ctx.class_name
     if "@RequiredArgsConstructor" in ctx.class_anns or "@Data" in ctx.class_anns:
         required = _final_fields(ctx)
         if required:
             params = ", ".join(f"{t} {n}" for t, n in required)
-            ann = ctx.ann_lines.get(
-                "@RequiredArgsConstructor", ctx.ann_lines.get("@Data", ctx.class_line)
-            )
-            sig = f"public {ctx.class_name}({params})"
-            members.append(
-                LombokMember(
-                    ann, "constructor", ctx.class_name, sig, "@RequiredArgsConstructor"
-                )
-            )
+            ann = _ann_line(ctx, "@RequiredArgsConstructor", "@Data")
+            sig = f"public {cls}({params})"
+            mem = _mk(ann, "constructor", cls, sig, "@RequiredArgsConstructor")
+            members.append(mem)
     if "@AllArgsConstructor" in ctx.class_anns:
         params = ", ".join(f"{t} {n}" for _, t, n in ctx.fields)
-        ann = ctx.ann_lines.get("@AllArgsConstructor", ctx.class_line)
-        sig = f"public {ctx.class_name}({params})"
-        members.append(
-            LombokMember(ann, "constructor", ctx.class_name, sig, "@AllArgsConstructor")
-        )
+        ann = _ann_line(ctx, "@AllArgsConstructor")
+        sig = f"public {cls}({params})"
+        members.append(_mk(ann, "constructor", cls, sig, "@AllArgsConstructor"))
     if "@NoArgsConstructor" in ctx.class_anns:
-        ann = ctx.ann_lines.get("@NoArgsConstructor", ctx.class_line)
-        members.append(
-            LombokMember(
-                ann,
-                "constructor",
-                ctx.class_name,
-                f"public {ctx.class_name}()",
-                "@NoArgsConstructor",
-            )
-        )
+        ann = _ann_line(ctx, "@NoArgsConstructor")
+        sig = f"public {cls}()"
+        members.append(_mk(ann, "constructor", cls, sig, "@NoArgsConstructor"))
     return members
 
 
 def _infer_extras(ctx: LombokContext) -> list[LombokMember]:
     """Infer equals/hashCode/toString/builder/logger from class annotations."""
     members: list[LombokMember] = []
+    cls = ctx.class_name
     if "@Data" in ctx.class_anns or "@EqualsAndHashCode" in ctx.class_anns:
-        ann = ctx.ann_lines.get(
-            "@Data", ctx.ann_lines.get("@EqualsAndHashCode", ctx.class_line)
-        )
-        members.append(
-            LombokMember(
-                line=ann,
-                kind="method",
-                name="equals",
-                signature="public boolean equals(Object o)",
-                source="@Data",
-            )
-        )
-        members.append(
-            LombokMember(
-                line=ann,
-                kind="method",
-                name="hashCode",
-                signature="public int hashCode()",
-                source="@Data",
-            )
-        )
+        ann = _ann_line(ctx, "@Data", "@EqualsAndHashCode")
+        members.append(_mk(ann, "method", "equals", _EQ_SIG, "@Data"))
+        members.append(_mk(ann, "method", "hashCode", _HC_SIG, "@Data"))
     if "@Data" in ctx.class_anns or "@ToString" in ctx.class_anns:
-        ann = ctx.ann_lines.get("@Data", ctx.ann_lines.get("@ToString", ctx.class_line))
-        members.append(
-            LombokMember(
-                line=ann,
-                kind="method",
-                name="toString",
-                signature="public String toString()",
-                source="@Data",
-            )
-        )
+        ann = _ann_line(ctx, "@Data", "@ToString")
+        members.append(_mk(ann, "method", "toString", _TS_SIG, "@Data"))
     if "@Builder" in ctx.class_anns:
-        ann = ctx.ann_lines.get("@Builder", ctx.class_line)
-        members.append(
-            LombokMember(
-                line=ann,
-                kind="method",
-                name="builder",
-                signature=f"public static {ctx.class_name}.Builder builder()",
-                source="@Builder",
-            )
-        )
-    # Logger
+        ann = _ann_line(ctx, "@Builder")
+        sig = f"public static {cls}.Builder builder()"
+        members.append(_mk(ann, "method", "builder", sig, "@Builder"))
+    # Logger: at most one per class (break after the first matching annotation).
     for ann_key, (logger_type, _, factory_call) in _LOGGER_ANNOTATIONS.items():
         if ann_key in ctx.class_anns:
-            ann = ctx.ann_lines.get(ann_key, ctx.class_line)
-            init = factory_call.format(cls=ctx.class_name)
+            ann = _ann_line(ctx, ann_key)
+            init = factory_call.format(cls=cls)
             sig = f"private static final {logger_type} log = {init}"
-            members.append(LombokMember(ann, "field", "log", sig, ann_key))
+            members.append(_mk(ann, "field", "log", sig, ann_key))
             break
     return members
 

@@ -168,6 +168,17 @@ def cmd_map(args: argparse.Namespace) -> int:
         per_file = _collect_indexed_symbols(tags_path, args.tests, root)
     finally:
         Path(tags_path).unlink(missing_ok=True)
+
+    # Lombok members: append to Java files.
+    for file in list(per_file.keys()):
+        if file.endswith(".java"):
+            from codeq.shared.lombok import detect_lombok_members
+            seen_names = {t[2] for t in per_file[file]}
+            for m in detect_lombok_members(file):
+                if m.kind == "method" and m.name not in seen_names:
+                    per_file[file].append((m.line, "lombok-method", m.name))
+                    seen_names.add(m.name)
+
     if not per_file:
         print(f"no symbols indexed under {root}", file=sys.stderr)
         return 1

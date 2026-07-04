@@ -26,7 +26,7 @@ def _astgrep_body(pattern: str, lang: str, file: str) -> str | None:
     matches = data if isinstance(data, list) else data.get("matches", [])
     for m in matches:
         text = m.get("text") if isinstance(m, dict) else None
-        if text:
+        if isinstance(text, str):
             return text.rstrip("\n")
     return None
 
@@ -99,6 +99,11 @@ def _raw_body(file: str, name: str, lang: str) -> str | None:
     langs return None (caller falls back to the ctags line)."""
     if lang == "python":
         return _py_body(file, name)
+    if lang == "java":
+        from codeq.shared.lombok import detect_lombok_members
+        for m in detect_lombok_members(file):
+            if m.name == name:
+                return f"{m.signature} {{\n    // lombok-generated {m.kind} from {m.source}\n}}"
     for pat in BODY_PATTERNS.get(lang, []):
         b = _astgrep_body(pat.replace("{N}", name), lang, file)
         if b:

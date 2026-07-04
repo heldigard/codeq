@@ -230,4 +230,6 @@ examples:
         from codeq.json_handler import run_with_json
 
         return run_with_json(args)
-    return args.func(args)
+    from typing import Callable
+    func: Callable[[argparse.Namespace], int] = args.func
+    return func(args)

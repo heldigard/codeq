@@ -14,10 +14,11 @@ def test_lombok_detect_annotations(fixture_dir: Path) -> None:
     file = str(fixture_dir / "CustomerLombok.java")
     members = detect_lombok_members(file)
 
-    # Should find getters for id, name, active
+    # Getters for non-boolean fields (id, name). `active` is primitive boolean
+    # so Lombok generates isActive(), NOT getActive() — exclude it here.
     getters = [m for m in members if m.name.startswith("get")]
-    assert len(getters) >= 3, (
-        f"Expected >= 3 getters, got {len(getters)}: {[m.name for m in getters]}"
+    assert len(getters) >= 2, (
+        f"Expected >= 2 getters, got {len(getters)}: {[m.name for m in getters]}"
     )
 
     # Should find setters for id, name, active
@@ -26,10 +27,16 @@ def test_lombok_detect_annotations(fixture_dir: Path) -> None:
         f"Expected >= 3 setters, got {len(setters)}: {[m.name for m in setters]}"
     )
 
-    # Should find boolean getter with 'is' prefix
+    # Should find boolean getter with 'is' prefix (primitive boolean → isX only)
     is_active = [m for m in members if m.name == "isActive"]
     assert len(is_active) == 1, (
         f"Expected isActive getter, got {[m.name for m in is_active]}"
+    )
+
+    # Regression: primitive boolean must NOT also emit getActive (Lombok emits
+    # isX only for primitive boolean). Dual emission misleads callers.
+    assert not any(m.name == "getActive" for m in members), (
+        "primitive boolean field must not emit getActive (only isActive)"
     )
 
     # Should find equals/hashCode from @Data
@@ -113,3 +120,129 @@ def test_lombok_json_outline(fixture_dir: Path) -> None:
     assert data["exit_code"] == 0
     assert "getId" in data["output"]
     assert "setName" in data["output"]
+
+
+def test_lombok_boolean_primitive_is_only() -> None:
+    """Regression: primitive boolean → isX only (not getX+isX dual).
+
+    Lombok @Getter on a primitive `boolean` field generates isFoo(), never
+    getFoo(). Dual emission was a false-positive that misled callers into
+    navigating a method that does not exist in the compiled class.
+    """
+    import tempfile
+
+    from codeq.shared.lombok import detect_lombok_members
+
+    src = (
+        "package x;\nimport lombok.Data;\n"
+        "@Data\npublic class Holder {\n"
+        "    private boolean active;\n"
+        "    private Boolean enabled;\n"  # wrapper Boolean → getX() only
+        "}\n"
+    )
+    f = tempfile.NamedTemporaryFile(suffix=".java", delete=False, mode="w")
+    f.write(src)
+    f.close()
+    try:
+        members = detect_lombok_members(f.name)
+        names = {m.name for m in members}
+        # primitive boolean: isX only
+        assert "isActive" in names, f"missing isActive (primitive boolean): {names}"
+        assert "getActive" not in names, (
+            f"primitive boolean must not emit getActive: {names}"
+        )
+        # wrapper Boolean: getX only (no isX)
+        assert "getEnabled" in names, f"missing getEnabled (wrapper Boolean): {names}"
+        assert "isEnabled" not in names, (
+            f"wrapper Boolean must not emit isEnabled: {names}"
+        )
+    finally:
+        import os
+
+        os.unlink(f.name)
+
+
+def test_lombok_static_substring_field_not_excluded() -> None:
+    """Regression: an instance field whose name contains 'static' (e.g.
+    staticCount) must NOT be mistaken for a static field and dropped."""
+    import tempfile
+
+    from codeq.shared.lombok import detect_lombok_members
+
+    src = (
+        "package x;\nimport lombok.Data;\n"
+        "@Data\npublic class Counter {\n"
+        "    private int staticCount;\n"  # instance field, name has 'static'
+        "    private int total;\n"
+        "}\n"
+    )
+    f = tempfile.NamedTemporaryFile(suffix=".java", delete=False, mode="w")
+    f.write(src)
+    f.close()
+    try:
+        members = detect_lombok_members(f.name)
+        names = {m.name for m in members}
+        # PascalCase of staticCount → StaticCount → getStaticCount / setStaticCount
+        assert "getStaticCount" in names, (
+            f"'staticCount' instance field was wrongly dropped as static: {names}"
+        )
+        assert "setStaticCount" in names, f"missing setStaticCount: {names}"
+        assert "getTotal" in names, f"missing getTotal: {names}"
+    finally:
+        import os
+
+        os.unlink(f.name)
+
+
+def test_lombok_package_decl_not_a_field() -> None:
+    """Regression: a single-segment package declaration (e.g. `package x;`)
+    must not be parsed as a field of type 'package'. The field regex anchored
+    on any `Type name;` line, so `package x;` matched and produced a bogus
+    getX() getter with an invalid `package` type."""
+    import tempfile
+
+    from codeq.shared.lombok import detect_lombok_members
+
+    src = (
+        "package x;\nimport lombok.Data;\n"
+        "@Data\npublic class Pkg {\n"
+        "    private Long id;\n"
+        "}\n"
+    )
+    f = tempfile.NamedTemporaryFile(suffix=".java", delete=False, mode="w")
+    f.write(src)
+    f.close()
+    try:
+        members = detect_lombok_members(f.name)
+        names = {m.name for m in members}
+        assert "getId" in names, f"missing getId: {names}"
+        # the package decl must NOT become a field
+        assert "getX" not in names, (
+            f"package declaration was parsed as a field (getX): {names}"
+        )
+        bogus = [m for m in members if m.signature.startswith("public package")]
+        assert not bogus, f"invalid 'package' type in signature: {bogus}"
+    finally:
+        import os
+
+        os.unlink(f.name)
+
+
+def test_lombok_body_and_sig(fixture_dir: Path) -> None:
+    """codeq body and sig retrieve synthetic signatures/bodies for Lombok members."""
+    # Sig check
+    result = run(["codeq", "sig", "getId", str(fixture_dir / "CustomerLombok.java")])
+    assert "public Long getId()" in result.stdout
+
+    # Body check
+    result = run(["codeq", "body", "getId", str(fixture_dir / "CustomerLombok.java")])
+    assert "public Long getId() {" in result.stdout
+    assert "lombok-generated" in result.stdout
+
+
+def test_lombok_repo_map(fixture_dir: Path) -> None:
+    """codeq map lists Lombok-generated methods for Java files."""
+    result = run(["codeq", "map", "-p", str(fixture_dir), "--top", "50", "--syms", "10"])
+    assert "CustomerLombok.java" in result.stdout
+    assert "getId" in result.stdout
+    assert "lombok-method" in result.stdout

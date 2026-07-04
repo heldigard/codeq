@@ -167,7 +167,11 @@ def get_rdeps(
     return rows
 
 
-def _dedup_extend(rows, seen, candidates):
+def _dedup_extend(
+    rows: list[tuple[str, int, str]],
+    seen: set[tuple[str, str]],
+    candidates: list[tuple[str, int, str]],
+) -> None:
     """Append non-duplicate rdep rows. Extracted to keep nesting ≤ 3."""
     for rpath, ln, text in candidates:
         dedup = (rpath, text)
