@@ -13,6 +13,7 @@ from codeq.shared.config import (
 from codeq.shared.core import run
 from codeq.shared.locators import _locate_line
 
+
 def _astgrep_body(pattern: str, lang: str, file: str) -> str | None:
     """Return clean matched-node text (via --json) or None."""
     rc, out, _ = run([ASTGREP, "run", "-p", pattern, "--lang", lang, "--json", file])
@@ -29,30 +30,37 @@ def _astgrep_body(pattern: str, lang: str, file: str) -> str | None:
             return text.rstrip("\n")
     return None
 
+
 def _py_body(file: str, name: str, only_class: bool = False) -> str | None:
     """Exact Python def/class body via the ast module — handles methods inside
     classes, decorators, and the precise end line. More accurate than ast-grep
     for Python (which misses nested methods). If `only_class`, match ClassDef
     only (used by the `class` subcommand)."""
     import ast as _ast
+
     try:
         src = Path(file).read_text(errors="replace")
         tree = _ast.parse(src)
     except (SyntaxError, OSError):
         return None
     lines = src.splitlines()
-    want = _ast.ClassDef if only_class else (
-        _ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef
+    want = (
+        _ast.ClassDef
+        if only_class
+        else (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef)
     )
     for node in _ast.walk(tree):
         if isinstance(node, want) and node.name == name:
-            start = node.decorator_list[0].lineno if node.decorator_list else node.lineno
+            deco = node.decorator_list
+            start = deco[0].lineno if deco else node.lineno
             end = node.end_lineno or node.lineno
-            return "\n".join(lines[start - 1:end])
+            return "\n".join(lines[start - 1 : end])
     return None
 
 
-def _brace_extract(file: str, name: str | None = None, start: int | None = None) -> str | None:
+def _brace_extract(
+    file: str, name: str | None = None, start: int | None = None
+) -> str | None:
     """Brace-lang body (method, top-level, or class) via ctags locate + brace
     counting. Fallback for nodes ast-grep cannot bind as a single pattern (TS/JS
     class methods, Java constructors, Java/Go/Rust class/struct decls). If
@@ -67,19 +75,21 @@ def _brace_extract(file: str, name: str | None = None, start: int | None = None)
         lines = Path(file).read_text(errors="replace").splitlines()
     except OSError:
         return None
+    return _brace_collect(lines, start)
+
+
+def _brace_collect(lines: list[str], start: int) -> str | None:
+    """Count braces from START line and return the body text. Extracted to
+    keep nesting ≤ 3 inside the per-line loop."""
     depth = 0
     begun = False
     out: list[str] = []
     for i in range(start - 1, len(lines)):
         out.append(lines[i])
-        for ch in lines[i]:
-            if ch == "{":
-                depth += 1
-                begun = True
-            elif ch == "}":
-                depth -= 1
-                if begun and depth == 0:
-                    return "\n".join(out)
+        depth += lines[i].count("{") - lines[i].count("}")
+        begun = begun or "{" in lines[i]
+        if begun and depth <= 0:
+            return "\n".join(out)
     return "\n".join(out) if begun else None
 
 
@@ -97,12 +107,15 @@ def _raw_body(file: str, name: str, lang: str) -> str | None:
         return _brace_extract(file, name)
     return None
 
+
 def _sig_from_raw(raw: str, lang: str) -> str:
     """Header line(s) only. Python: stop at the line ENDING with ':' (the `):`
     of a multi-line sig, or the `:` of a single-line def — NOT an annotation
     colon mid-line). Brace-langs: stop at the line opening the body `{`."""
+
     def stop(ln: str) -> bool:
         return ln.rstrip().endswith(":") if lang == "python" else "{" in ln
+
     out: list[str] = []
     for ln in raw.splitlines():
         out.append(ln)

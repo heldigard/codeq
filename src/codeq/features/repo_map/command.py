@@ -11,9 +11,18 @@ from codeq.shared.core import _parse_ctags_line, ctags_exclude_args, die, run
 
 # Orientational kinds for the repo map (declaration-level; variables/fields
 # excluded — they inflate noise without aiding navigation).
-_MAP_KINDS = frozenset({
-    "class", "interface", "struct", "enum", "trait", "function", "method", "type",
-})
+_MAP_KINDS = frozenset(
+    {
+        "class",
+        "interface",
+        "struct",
+        "enum",
+        "trait",
+        "function",
+        "method",
+        "type",
+    }
+)
 _MAP_FILE_SIZE_CAP = 512 * 1024  # skip pathological blobs in the frequency pass
 
 # Test/spec files are excluded from the map by default (--tests to include):
@@ -126,6 +135,7 @@ def _save_map(root: Path, out_text: str) -> None:
     topic = bank / "topics" / "code-map.md"
     topic.parent.mkdir(exist_ok=True)
     from datetime import datetime, timezone
+
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     topic.write_text(
         "# Code Map (auto-generated)\n"
@@ -163,6 +173,7 @@ def cmd_map(args: argparse.Namespace) -> int:
         return 1
     # One frequency pass over the indexed source files (vendor already excluded).
     from collections import Counter
+
     freq: Counter[str] = Counter()
     defs: Counter[str] = Counter()
     minified: set[str] = set()

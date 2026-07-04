@@ -39,7 +39,10 @@ export class X {
         # stderr has the disabled-prefix note.
         r = subprocess.run(
             ["codeq", "summary", "doWork", str(d / "mod.ts"), "--no-llm"],
-            capture_output=True, text=True, env=env_no_llm, check=False,
+            capture_output=True,
+            text=True,
+            env=env_no_llm,
+            check=False,
         )
         assert r.returncode == 2, (
             f"summary --no-llm should exit 2 (Ollama skipped): rc={r.returncode} "
@@ -56,9 +59,14 @@ export class X {
         # appears as the FIRST stdout block (so it travels with the output).
         r = subprocess.run(
             ["codeq", "body", "doWork", str(d / "mod.ts"), "--summary", "--no-llm"],
-            capture_output=True, text=True, env=env_no_llm, check=False,
+            capture_output=True,
+            text=True,
+            env=env_no_llm,
+            check=False,
         )
-        assert r.returncode == 0, f"body --summary --no-llm should exit 0: rc={r.returncode}"
+        assert r.returncode == 0, (
+            f"body --summary --no-llm should exit 0: rc={r.returncode}"
+        )
         assert "doWork(input: string)" in r.stdout, (
             f"body --summary --no-llm lost the body: {r.stdout!r}"
         )
@@ -70,7 +78,10 @@ export class X {
         # imports), summary section replaced by a one-line note.
         r = subprocess.run(
             ["codeq", "context", "doWork", str(d / "mod.ts"), "-p", str(d), "--no-llm"],
-            capture_output=True, text=True, env=env_no_llm, check=False,
+            capture_output=True,
+            text=True,
+            env=env_no_llm,
+            check=False,
         )
         assert r.returncode == 0
         for section in (
@@ -82,13 +93,26 @@ export class X {
             "caller.ts",  # caller is referenced under refs
             "[summary skipped",  # the lighter no-llm note for context/relations
         ):
-            assert section in r.stdout, f"context --no-llm missing section {section!r}: {r.stdout[:500]!r}"
+            assert section in r.stdout, (
+                f"context --no-llm missing section {section!r}: {r.stdout[:500]!r}"
+            )
 
         # `relations --no-llm` → summary skipped, signature + body-call hints +
         # external refs sections present.
         r = subprocess.run(
-            ["codeq", "relations", "doWork", str(d / "mod.ts"), "-p", str(d), "--no-llm"],
-            capture_output=True, text=True, env=env_no_llm, check=False,
+            [
+                "codeq",
+                "relations",
+                "doWork",
+                str(d / "mod.ts"),
+                "-p",
+                str(d),
+                "--no-llm",
+            ],
+            capture_output=True,
+            text=True,
+            env=env_no_llm,
+            check=False,
         )
         assert r.returncode == 0
         for section in (
@@ -99,16 +123,19 @@ export class X {
             "this.svc.process()",  # body-call hint from regex sweep
             "[summary skipped",
         ):
-            assert section in r.stdout, f"relations --no-llm missing {section!r}: {r.stdout[:500]!r}"
+            assert section in r.stdout, (
+                f"relations --no-llm missing {section!r}: {r.stdout[:500]!r}"
+            )
         # The symbol's OWN name must NOT leak as a self-call hint (the regex
         # would otherwise match the signature line `doWork(...)`). Bug fixed
         # 2026-06-28 via the exclude_name param on _body_call_hints.
-        hint_block = r.stdout.split("=== Internal call hints", 1)[-1].split("=== External refs", 1)[0]
-        assert "\n# - doWork" not in hint_block and "doWork()" not in hint_block.replace(
-            "this.svc.process", ""
-        ), (
-            f"relations leaked the symbol's own name as a call hint: {hint_block!r}"
-        )
+        hint_block = r.stdout.split("=== Internal call hints", 1)[-1].split(
+            "=== External refs", 1
+        )[0]
+        assert (
+            "\n# - doWork" not in hint_block
+            and "doWork()" not in hint_block.replace("this.svc.process", "")
+        ), f"relations leaked the symbol's own name as a call hint: {hint_block!r}"
 
 
 def test_codeq_summary_and_context_live() -> None:
@@ -122,6 +149,7 @@ def test_codeq_summary_and_context_live() -> None:
         if sys_mod_path not in sys.path:
             sys.path.insert(0, sys_mod_path)
         import ollama_client  # type: ignore
+
         if not ollama_client.is_alive(timeout=2.0):
             return  # daemon down — skip
     except Exception:
@@ -135,11 +163,15 @@ def test_codeq_summary_and_context_live() -> None:
         )
         r = subprocess.run(
             ["codeq", "summary", "greet", str(d / "greet.py")],
-            capture_output=True, text=True, check=False,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         if r.returncode != 0:
             return  # model returned empty / transport flake — skip, not a hard fail
-        assert "ollama-summary:" in r.stdout, f"live summary missing banner: {r.stdout!r}"
+        assert "ollama-summary:" in r.stdout, (
+            f"live summary missing banner: {r.stdout!r}"
+        )
         # The summary line should NOT contain a code block fence or the body itself
         # (proves we're returning a short prose description, not the source).
         assert "def greet" not in r.stdout, (

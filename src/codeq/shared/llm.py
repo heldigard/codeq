@@ -47,7 +47,7 @@ def _llm_status(no_llm: bool = False) -> tuple[bool, str, str]:
         return (False, "", "CODEQ_NO_LLM=1 / --no-llm")
     try:
         import ollama_client  # type: ignore[import-not-found]
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         return (False, "", "ollama_client not importable (run from this host?)")
     try:
         if not ollama_client.is_alive(timeout=2.0):
@@ -89,6 +89,7 @@ def _summarize_code(
         return (None, reason, 0.0)
     import ollama_client  # type: ignore[import-not-found]
     import time as _time
+
     # Truncate to keep the small model focused on the signature + first ~2.5KB.
     BODY_BUDGET = 2500
     is_truncated = len(body) > BODY_BUDGET
@@ -96,7 +97,8 @@ def _summarize_code(
     truncation_note = (
         "\n[NOTE: BODY TRUNCATED — only the first portion is shown above; "
         "describe what is visible and do not assume the rest.]"
-        if is_truncated else ""
+        if is_truncated
+        else ""
     )
     prompt = (
         "You are summarizing a function/class/method for a senior LLM that is\n"
@@ -114,7 +116,11 @@ def _summarize_code(
     t0 = _time.monotonic()
     try:
         summary = ollama_client.generate(
-            prompt, model=model, temperature=0.2, num_ctx=8192, timeout=30,
+            prompt,
+            model=model,
+            temperature=0.2,
+            num_ctx=8192,
+            timeout=30,
         )
     except Exception as exc:  # transport / timeout — never crash the caller
         return (None, f"Ollama call failed: {type(exc).__name__}", 0.0)
@@ -127,7 +133,9 @@ def _summarize_code(
     return (summary, model, cold)
 
 
-def _maybe_emit_summary(file_path: str, name: str, body: str, *, no_llm: bool = False) -> None:
+def _maybe_emit_summary(
+    file_path: str, name: str, body: str, *, no_llm: bool = False
+) -> None:
     """Print a tagged summary line BEFORE the body. Always silent on failure
     — the body is the authoritative source; the summary is just orientation.
     `source` is the actual model tag on success, so the banner reflects the
@@ -135,10 +143,12 @@ def _maybe_emit_summary(file_path: str, name: str, body: str, *, no_llm: bool = 
     The banner also reports the measured cold latency (honest, not a guess)."""
     summary, source, cold = _summarize_code(file_path, name, body, no_llm=no_llm)
     if summary:
-        print(_OLLAMA_SUMMARY_PREFIX.format(
-            model=source or "local-llm",
-            lat=f"{cold:.1f}" if cold else "?",
-        ))
+        print(
+            _OLLAMA_SUMMARY_PREFIX.format(
+                model=source or "local-llm",
+                lat=f"{cold:.1f}" if cold else "?",
+            )
+        )
         print(f"# {summary}")
         print("# [body follows — read it to verify the summary before reasoning]")
         print()

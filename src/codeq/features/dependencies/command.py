@@ -10,10 +10,6 @@ from codeq.shared.config import IMPORT_PATTERNS
 from codeq.shared.core import die, lang_of
 from codeq.shared.search import search_lexical
 
-# vs-soft-allow — remaining nesting-depth-4 hits are PRE-EXISTING (the
-# for/if/for chain in _py_deps and _is_import_of, plus one line-continuation),
-# not introduced by the deps work; the deps/rdeps logic is shallow.
-
 
 def _py_deps(file: str) -> list[tuple[int, str, str]] | None:
     """Python imports via ast (exact): Import + ImportFrom with module + names."""
@@ -27,13 +23,29 @@ def _py_deps(file: str) -> list[tuple[int, str, str]] | None:
     rows: list[tuple[int, str, str]] = []
     for node in _ast.walk(tree):
         if isinstance(node, _ast.Import):
-            for alias in node.names:
-                rows.append((node.lineno, "import", alias.name))
+            rows.extend((node.lineno, "import", a.name) for a in node.names)
         elif isinstance(node, _ast.ImportFrom):
             mod = node.module or ""
             names = ", ".join(a.name for a in node.names)
             rows.append((node.lineno, "from", f"{mod} ( {names} )"))
     return rows or None
+
+
+def get_deps(file: str, lang: str | None = None) -> list[tuple[int, str, str]]:
+    """Core deps logic: returns import rows as (line, kind, module).
+
+    Pure function — no argparse, no stdout. Callers (cmd_deps, cmd_context)
+    use this directly instead of constructing Namespace objects.
+
+    Returns sorted [(line_no, 'import'|'from', module_name), ...] or empty."""
+    resolved_lang = lang or ""
+    if not resolved_lang:
+        try:
+            resolved_lang = lang_of(file, None)
+        except SystemExit:
+            return []
+    rows = _py_deps(file) if resolved_lang == "python" else re_deps(file, resolved_lang)
+    return sorted(rows) if rows else []
 
 
 def cmd_deps(args: argparse.Namespace) -> int:
@@ -42,11 +54,11 @@ def cmd_deps(args: argparse.Namespace) -> int:
     if not Path(args.file).is_file():
         die(f"no such file: {args.file}")
     lang = lang_of(args.file, args.lang)
-    rows = _py_deps(args.file) if lang == "python" else re_deps(args.file, lang)
+    rows = get_deps(args.file, lang)
     if not rows:
         print(f"no imports found in {args.file} (lang={lang})", file=sys.stderr)
         return 1
-    for ln, kind, mod in sorted(rows):
+    for ln, kind, mod in rows:
         print(f"{ln:>5}  {kind:<6}  {mod}")
     return 0
 
@@ -120,6 +132,51 @@ _INCLUDES_BY_LANG: dict[str, list[str]] = {
 }
 
 
+def get_rdeps(
+    file: str,
+    path: str,
+    lang: str | None = None,
+    limit: int = 200,
+) -> list[tuple[str, int, str]]:
+    """Core rdeps logic: returns reverse dependency rows as (file, line, text).
+
+    Pure function — no argparse, no stdout. Callers (cmd_rdeps, JSON output)
+    use this directly instead of constructing Namespace objects.
+
+    Returns sorted [(file, line_no, import_text), ...] or empty."""
+    f = Path(file)
+    if not f.is_file():
+        return []
+    resolved_lang = lang or ""
+    if not resolved_lang:
+        try:
+            resolved_lang = lang_of(file, None)
+        except SystemExit:
+            return []
+    keys = _module_keys(file)
+    includes = _INCLUDES_BY_LANG.get(resolved_lang, [])
+    target = f.resolve()
+    seen: set[tuple[str, str]] = set()
+    rows: list[tuple[str, int, str]] = []
+    for key in keys:
+        hits = search_lexical(key, path, includes)
+        _dedup_extend(rows, seen, _rdep_rows_for_key(hits, key, target, resolved_lang))
+    rows.sort()
+    if limit:
+        return rows[:limit]
+    return rows
+
+
+def _dedup_extend(rows, seen, candidates):
+    """Append non-duplicate rdep rows. Extracted to keep nesting ≤ 3."""
+    for rpath, ln, text in candidates:
+        dedup = (rpath, text)
+        if dedup in seen:
+            continue
+        seen.add(dedup)
+        rows.append((rpath, ln, text))
+
+
 def cmd_rdeps(args: argparse.Namespace) -> int:
     """Reverse dependencies of a FILE: which project files import it.
     Regex-level (same import shapes as `deps`), not a build graph — a module
@@ -130,36 +187,36 @@ def cmd_rdeps(args: argparse.Namespace) -> int:
     if not f.is_file():
         die(f"no such file: {args.file}")
     lang = lang_of(args.file, args.lang)
-    keys = _module_keys(args.file)
-    includes = _INCLUDES_BY_LANG.get(lang, [])
-    target = f.resolve()
-    seen: set[tuple[str, str]] = set()
-    rows: list[tuple[str, int, str]] = []
-    for key in keys:
-        hits = search_lexical(key, args.path, includes)
-        for path, ln, text in _rdep_rows_for_key(hits, key, target, lang):
-            dedup = (path, text)
-            if dedup in seen:
-                continue
-            seen.add(dedup)
-            rows.append((path, ln, text))
+    limit = getattr(args, "limit", 200) or 0
+    rows = get_rdeps(args.file, args.path, lang, limit=limit)
     if not rows:
+        keys = _module_keys(args.file)
         print(
             f"no project file imports '{'/'.join(keys)}' under {args.path}",
             file=sys.stderr,
         )
         return 1
-    rows.sort()
-    for path, ln, text in rows[:200]:
+    for path, ln, text in rows:
         print(f"{path}:{ln}: {text}")
-    if len(rows) > 200:
-        print(
-            f"... {len(rows) - 200} more importers (narrow with --path)",
-            file=sys.stderr,
-        )
     n_files = len({r[0] for r in rows})
     print(f"-- {len(rows)} import line(s) across {n_files} file(s)", file=sys.stderr)
     return 0
+
+
+def _ts_module_matches(mod_path: str, key: str) -> bool:
+    """Check if a JS/TS module path's last segment matches KEY."""
+    last = mod_path.rstrip("/").split("/")[-1]
+    last = re.sub(r"\.(js|mjs|cjs|jsx|ts|tsx)$", "", last)
+    return last == key
+
+
+def _ts_pattern_matches(text: str, lang: str, key: str) -> bool:
+    """Check if any JS/TS import pattern matches TEXT for module KEY."""
+    for pat in IMPORT_PATTERNS.get(lang, IMPORT_PATTERNS["typescript"]):
+        m = pat.search(text)
+        if m and _ts_module_matches(m.group(1), key):
+            return True
+    return False
 
 
 def _is_import_of(text: str, key: str, lang: str) -> bool:
@@ -175,22 +232,15 @@ def _is_import_of(text: str, key: str, lang: str) -> bool:
             part.split(".")[-1] == key or key in part.split(".") for part in candidates
         )
     if lang in ("javascript", "typescript"):
-        for pat in IMPORT_PATTERNS.get(lang, IMPORT_PATTERNS["typescript"]):
-            m = pat.search(text)
-            if m:
-                mod = m.group(1)
-                last = mod.rstrip("/").split("/")[-1]
-                last = re.sub(r"\.(js|mjs|cjs|jsx|ts|tsx)$", "", last)
-                return last == key
+        if _ts_pattern_matches(text, lang, key):
+            return True
         # Multi-line import closer: `} from './module';` carries the module
         # path but no leading import/export keyword, so the anchored patterns
         # above miss it — without this, rdeps reports zero importers for any
         # barrel/harness module. Match the closer and compare the last segment.
         m = re.search(r"\bfrom\s+['\"]([^'\"]+)['\"]", text)
         if m:
-            last = m.group(1).rstrip("/").split("/")[-1]
-            last = re.sub(r"\.(js|mjs|cjs|jsx|ts|tsx)$", "", last)
-            return last == key
+            return _ts_module_matches(m.group(1), key)
         return False
     if lang == "java":
         return (

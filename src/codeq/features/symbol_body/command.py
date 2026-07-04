@@ -10,6 +10,7 @@ from codeq.shared.extraction import _class_body, _raw_body, _sig_from_raw
 from codeq.shared.locators import _locate_line
 from codeq.shared.llm import _maybe_emit_summary
 
+
 def cmd_class(args: argparse.Namespace) -> int:
     """Full class/type body (all members), distinct from `body` which targets a
     single method. Fixes the Java case where `body <Class>` returned only the
@@ -26,8 +27,12 @@ def cmd_class(args: argparse.Namespace) -> int:
     ln = _locate_line(args.file, args.name, kinds=TYPE_KINDS)
     if ln:
         print(f"{args.file}:{ln}")
-        print("(no exact class-body extractor for this language; Read from the line above.)",
-              file=sys.stderr)
+        print(
+            f"(no exact class-body extractor for {lang}; "
+            f"try: codeq outline {args.file} to list members, "
+            f"or codeq body <member> {args.file} for a specific method)",
+            file=sys.stderr,
+        )
         return 0
     print(f"no class/type '{args.name}' in {args.file} (lang={lang})", file=sys.stderr)
     return 1
@@ -46,11 +51,16 @@ def cmd_body(args: argparse.Namespace) -> int:
     ln = _locate_line(args.file, args.name)
     if ln:
         print(f"{args.file}:{ln}")
-        print("(no exact body extractor for this language; Read from the line above.)",
-              file=sys.stderr)
+        print(
+            f"(no exact body extractor for {lang}; "
+            f"try: codeq outline {args.file} to list symbols, "
+            f"or codeq sig {args.name} {args.file} for the signature only)",
+            file=sys.stderr,
+        )
         return 0
     print(f"no def/class '{args.name}' in {args.file} (lang={lang})", file=sys.stderr)
     return 1
+
 
 def cmd_sig(args: argparse.Namespace) -> int:
     """Signature only (header line(s)); cheaper than body."""

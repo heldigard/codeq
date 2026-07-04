@@ -7,11 +7,17 @@ from pathlib import Path
 
 from codeq.shared.config import _RESERVED_KEYWORDS
 from codeq.shared.core import die, lang_of
-from codeq.features.dependencies.command import cmd_deps
+from codeq.features.dependencies.command import get_deps
 from codeq.shared.extraction import _raw_body, _sig_from_raw
 from codeq.shared.locators import _locate_line
-from codeq.shared.llm import _maybe_emit_summary, _OLLAMA_DISABLED_PREFIX, _OLLAMA_SUMMARY_PREFIX, _summarize_code
-from codeq.features.references.command import cmd_refs
+from codeq.shared.llm import (
+    _maybe_emit_summary,
+    _OLLAMA_DISABLED_PREFIX,
+    _OLLAMA_SUMMARY_PREFIX,
+    _summarize_code,
+)
+from codeq.features.references.command import get_refs
+
 
 def cmd_summary(args: argparse.Namespace) -> int:
     """Compact 1-line description of a function/method. Uses local Ollama
@@ -26,27 +32,24 @@ def cmd_summary(args: argparse.Namespace) -> int:
     lang = lang_of(args.file, args.lang)
     raw = _raw_body(args.file, args.name, lang)
     if raw is None:
-        ln = _locate_line(args.file, args.name)
-        if ln:
-            print(f"{args.file}:{ln}", file=sys.stderr)
-            print("(no exact body extractor; can't summarize.)", file=sys.stderr)
-        else:
-            print(f"no def/class '{args.name}' in {args.file} (lang={lang})", file=sys.stderr)
-        return 1
-    summary, reason, cold = _summarize_code(args.file, args.name, raw, no_llm=args.no_llm)
+        return _no_body_error(args.file, args.name, lang, "summarize")
+    summary, reason, cold = _summarize_code(
+        args.file, args.name, raw, no_llm=args.no_llm
+    )
     if summary:
         # `reason` holds the model tag on success (see _summarize_code return).
-        print(_OLLAMA_SUMMARY_PREFIX.format(
-            model=reason or "local-llm",
-            lat=f"{cold:.1f}" if cold else "?",
-        ))
+        print(
+            _OLLAMA_SUMMARY_PREFIX.format(
+                model=reason or "local-llm",
+                lat=f"{cold:.1f}" if cold else "?",
+            )
+        )
         print(f"# {summary}")
         return 0
     # Ollama unavailable — degrade gracefully so a missing daemon never
     # blocks the agent loop. Print the reason to stderr (visible when
     # debugging, silent in the agent loop's pipe-to-LLM path).
-    print(_OLLAMA_DISABLED_PREFIX.format(reason=reason or "unknown"),
-          file=sys.stderr)
+    print(_OLLAMA_DISABLED_PREFIX.format(reason=reason or "unknown"), file=sys.stderr)
     return 2  # distinct from "no symbol found" (1) so callers can branch
 
 
@@ -55,6 +58,27 @@ def _print_section(title: str) -> None:
     print()
     print(f"# === {title} ===")
     print()
+
+
+def _extract_calls_from_line(
+    line: str,
+    rx: re.Pattern[str],
+    seen: set[str],
+    exclude_name: str,
+) -> list[str]:
+    """Extract candidate call names from a single body line. Helper for
+    _body_call_hints to keep nesting shallow."""
+    calls: list[str] = []
+    for m in rx.finditer(line):
+        name = m.group(1).lstrip(".")
+        if name in _RESERVED_KEYWORDS or name in seen:
+            continue
+        tail = name.rsplit(".", 1)[-1]
+        if exclude_name and (tail == exclude_name or name == exclude_name):
+            continue
+        seen.add(name)
+        calls.append(name)
+    return calls
 
 
 def _body_call_hints(body: str, exclude_name: str = "") -> list[str]:
@@ -68,24 +92,27 @@ def _body_call_hints(body: str, exclude_name: str = "") -> list[str]:
     rx = re.compile(r"(?:^|[^.\w])((?:\.{0,2}\w+)+)\s*\(")
     seen: set[str] = set()
     for line in body.splitlines():
-        # skip signature line and explicit comments / decorators
         s = line.strip()
         if not s or s.startswith(("#", "//", "/*", "*", "@")):
             continue
-        for m in rx.finditer(s):
-            name = m.group(1).lstrip(".")
-            if name in _RESERVED_KEYWORDS or name in seen:
-                continue
-            # Skip the symbol's own name — the signature line `name(...)` is
-            # not a self-call, it's the declaration. Also skip bare `name`
-            # (non-dotted) when it equals exclude_name (recursion is rare and
-            # not the point of an orientation hint).
-            tail = name.rsplit(".", 1)[-1]
-            if exclude_name and (tail == exclude_name or name == exclude_name):
-                continue
-            seen.add(name)
-            out.append(name)
+        out.extend(_extract_calls_from_line(s, rx, seen, exclude_name))
     return out[:25]  # cap so the output stays bounded
+
+
+def _no_body_error(file: str, name: str, lang: str, action: str) -> int:
+    """Shared error handler when body extraction fails. Returns exit code 1."""
+    ln = _locate_line(file, name)
+    if ln:
+        print(f"{file}:{ln}", file=sys.stderr)
+        print(
+            f"(no exact body extractor for {lang}; "
+            f"try: codeq outline {file} to list symbols, "
+            f"or codeq sig {name} {file} for signature only)",
+            file=sys.stderr,
+        )
+    else:
+        print(f"no def/class '{name}' in {file} (lang={lang})", file=sys.stderr)
+    return 1
 
 
 def cmd_context(args: argparse.Namespace) -> int:
@@ -103,13 +130,7 @@ def cmd_context(args: argparse.Namespace) -> int:
     lang = lang_of(args.file, args.lang)
     raw = _raw_body(args.file, args.name, lang)
     if raw is None:
-        ln = _locate_line(args.file, args.name)
-        if ln:
-            print(f"{args.file}:{ln}", file=sys.stderr)
-            print("(no exact body extractor; can't build context.)", file=sys.stderr)
-        else:
-            print(f"no def/class '{args.name}' in {args.file} (lang={lang})", file=sys.stderr)
-        return 1
+        return _no_body_error(args.file, args.name, lang, "build context")
     sig = _sig_from_raw(raw, lang)
     print(f"# [codeq context | target: {args.name} | file: {args.file} | lang: {lang}]")
     if args.no_llm:
@@ -121,18 +142,19 @@ def cmd_context(args: argparse.Namespace) -> int:
     _print_section("Body")
     print(raw)
     _print_section(f"Callers of '{args.name}' (refs across project)")
-    proj_dir = args.path
-    refs_args = argparse.Namespace(
-        name=args.name, lang=lang, path=proj_dir,
-    )
-    rc = cmd_refs(refs_args)
-    # cmd_refs prints to stdout directly; that's fine here — we want it
-    # embedded. _print_section already emitted the header.
-    print(f"# [refs exit: {rc}]")
+    refs = get_refs(args.name, args.path, lang)
+    if refs:
+        for line in refs:
+            print(line)
+    else:
+        print(f"(no references to '{args.name}' under {args.path})")
     _print_section(f"Imports of {args.file} (deps)")
-    deps_args = argparse.Namespace(file=args.file, lang=lang)
-    rc = cmd_deps(deps_args)
-    print(f"# [deps exit: {rc}]")
+    deps = get_deps(args.file, lang)
+    if deps:
+        for ln, kind, mod in deps:
+            print(f"{ln:>5}  {kind:<6}  {mod}")
+    else:
+        print(f"(no imports found in {args.file})")
     return 0
 
 
@@ -151,15 +173,11 @@ def cmd_relations(args: argparse.Namespace) -> int:
     lang = lang_of(args.file, args.lang)
     raw = _raw_body(args.file, args.name, lang)
     if raw is None:
-        ln = _locate_line(args.file, args.name)
-        if ln:
-            print(f"{args.file}:{ln}", file=sys.stderr)
-            print("(no exact body extractor; can't build relations.)", file=sys.stderr)
-        else:
-            print(f"no def/class '{args.name}' in {args.file} (lang={lang})", file=sys.stderr)
-        return 1
+        return _no_body_error(args.file, args.name, lang, "build relations")
     sig = _sig_from_raw(raw, lang)
-    print(f"# [codeq relations | target: {args.name} | file: {args.file} | lang: {lang}]")
+    print(
+        f"# [codeq relations | target: {args.name} | file: {args.file} | lang: {lang}]"
+    )
     if args.no_llm:
         print("# [summary skipped — --no-llm]")
     else:
@@ -172,11 +190,14 @@ def cmd_relations(args: argparse.Namespace) -> int:
         for c in calls:
             print(f"# - {c}()")
     else:
-        print("# (no candidate method calls detected — body may be very short or text-only)")
+        print(
+            "# (no candidate method calls detected — body may be very short or text-only)"
+        )
     _print_section(f"External refs — callers of '{args.name}'")
-    refs_args = argparse.Namespace(
-        name=args.name, lang=lang, path=args.path,
-    )
-    rc = cmd_refs(refs_args)
-    print(f"# [refs exit: {rc}]")
+    refs = get_refs(args.name, args.path, lang)
+    if refs:
+        for line in refs:
+            print(line)
+    else:
+        print(f"(no references to '{args.name}' under {args.path})")
     return 0

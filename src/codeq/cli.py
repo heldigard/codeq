@@ -23,8 +23,28 @@ def main() -> int:
         prog="codeq",
         description="Precise code-fact extractor for big LLM controllers.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""\
+examples:
+  codeq find Foo -p src/          exact symbol locations
+  codeq outline src/app.py        symbol map of one file
+  codeq body Foo src/app.py       exact function/class body
+  codeq class Foo src/app.py      full class body (all members)
+  sig Foo src/app.py              signature only (cheaper than body)
+  codeq refs Foo -p src/          call sites (definition filtered)
+  codeq deps src/app.py           imports of a file
+  codeq rdeps src/foo.py -p src/  which files import foo.py
+  codeq context Foo src/app.py -p src/  bundled editing context
+  codeq map -p . --top 10         repo orientation map
+  codeq doctor                    check external binaries
+""",
     )
     ap.add_argument("--version", action="version", version=f"codeq {__version__}")
+    ap.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="output structured JSON instead of human-readable text",
+    )
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     f = sub.add_parser("find", help="exact symbol locations under a path")
@@ -90,6 +110,12 @@ def main() -> int:
     r.add_argument("name", help="symbol name")
     r.add_argument("-p", "--path", default=".", help="search root")
     r.add_argument("-l", "--lang", default=None, help="restrict file type")
+    r.add_argument(
+        "--limit",
+        type=int,
+        default=200,
+        help="max references to show (default: 200; 0 = unlimited)",
+    )
     r.set_defaults(func=cmd_refs)
 
     sg = sub.add_parser(
@@ -113,6 +139,12 @@ def main() -> int:
     rd.add_argument("file", help="the module/file whose importers you want")
     rd.add_argument("-p", "--path", default=".", help="search root")
     rd.add_argument("-l", "--lang", default=None, help="override language")
+    rd.add_argument(
+        "--limit",
+        type=int,
+        default=200,
+        help="max import lines to show (default: 200; 0 = unlimited)",
+    )
     rd.set_defaults(func=cmd_rdeps)
 
     mp = sub.add_parser(
@@ -194,4 +226,8 @@ def main() -> int:
     doc.set_defaults(func=cmd_doctor)
 
     args = ap.parse_args()
+    if args.json_output:
+        from codeq.json_handler import run_with_json
+
+        return run_with_json(args)
     return args.func(args)

@@ -6,6 +6,7 @@ from pathlib import Path
 from codeq.shared.config import CTAGS, _METHOD_LOCATOR, _RESERVED_KEYWORDS
 from codeq.shared.core import _parse_ctags_line, lang_of, run
 
+
 def _regex_locate_method(file: str, name: str, lang: str) -> int | None:
     """Regex-based fallback locator for brace-lang class methods when ctags
     misses them. Returns the 1-based line of the first signature match
@@ -28,19 +29,14 @@ def _regex_locate_method(file: str, name: str, lang: str) -> int | None:
             indented_hit = line_no
     return indented_hit
 
-def _regex_outline_methods(file: str, lang: str, skip_names: set[str]) -> list[tuple[int, str, str]]:
+
+def _regex_outline_methods(
+    file: str, lang: str, skip_names: set[str]
+) -> list[tuple[int, str, str]]:
     """Regex sweep that finds all method signatures in a brace-lang file (used
     by outline when ctags misses them due to the generic-arg-field bug).
     Returns [(line, kind='method', name), ...] — does NOT include names in
-    `skip_names` (used to avoid duplicating entries ctags DID return).
-
-    Discriminates real method declarations from in-method function calls via
-    two signal checks on the match line + immediate next lines:
-      1. Return-type annotation IMMEDIATELY after the closing `)`: `): Word`
-      2. Access modifier at the start of the line: `protected`/`private`/etc.
-         OR `async <Name>` (typed async method shorthand).
-    A bare `effect(() => {` call site has neither, so it's filtered out.
-    """
+    `skip_names` (used to avoid duplicating entries ctags DID return)."""
     if lang not in ("typescript", "javascript", "java"):
         return []
     if lang in ("typescript", "javascript"):
@@ -62,55 +58,66 @@ def _regex_outline_methods(file: str, lang: str, skip_names: set[str]) -> list[t
     except OSError:
         return []
     lines = text.splitlines()
+    depths = _brace_depth_prefix(lines)
     out: list[tuple[int, str, str]] = []
     return_re = re.compile(r"\)\s*:\s*[A-Za-z_$]")
     modifier_re = re.compile(
         r"^[ \t]*(?:public|private|protected|static|abstract|readonly)\s+"
     )
     async_re = re.compile(r"^[ \t]*async\s+[A-Za-z_$][\w$]*\s*\(")
+    ctx = {
+        "text": text,
+        "lines": lines,
+        "depths": depths,
+        "return_re": return_re,
+        "modifier_re": modifier_re,
+        "async_re": async_re,
+    }
     for m in rx.finditer(text):
-        line_no = text.count("\n", 0, m.start()) + 1
-        if line_no - 1 >= len(lines):
-            continue
-        line = lines[line_no - 1]
-        if _brace_depth_before_line(lines, line_no) != 1:
-            continue
-        name = m.group(1)
-        if name in _RESERVED_KEYWORDS:
-            continue
-        if name in skip_names:
-            continue
-        # Discrimination: real declaration has either a return-type annotation
-        # immediately after the closing `)`, OR an access modifier at line-start,
-        # OR an `async <Name>` shorthand. A plain function call has neither.
-        sig_window = "\n".join(lines[line_no - 1:line_no + 4])
-        is_decl = (
-            return_re.search(sig_window) is not None
-            or modifier_re.match(line) is not None
-            or async_re.match(line) is not None
-        )
-        if not is_decl:
-            continue
-        skip_names.add(name)
-        out.append((line_no, "method", name))
+        hit = _try_outline_match(m, ctx, skip_names)
+        if hit:
+            skip_names.add(hit[1])
+            out.append(hit)
     return out
 
 
-def _brace_depth_before_line(lines: list[str], line_no: int) -> int:
-    """Approximate brace depth before a 1-based line number.
+def _try_outline_match(m, ctx, skip_names):
+    """Process one regex match for _regex_outline_methods. Returns (line, name) or None."""
+    line_no = ctx["text"].count("\n", 0, m.start()) + 1
+    if line_no - 1 >= len(ctx["lines"]) or ctx["depths"][line_no - 1] != 1:
+        return None
+    name = m.group(1)
+    if name in _RESERVED_KEYWORDS or name in skip_names:
+        return None
+    line = ctx["lines"][line_no - 1]
+    sig_window = "\n".join(ctx["lines"][line_no - 1 : line_no + 4])
+    ret = ctx["return_re"].search(sig_window)
+    mod = ctx["modifier_re"].match(line)
+    asy = ctx["async_re"].match(line)
+    if not (ret or mod or asy):
+        return None
+    return (line_no, "method", name)
 
-    This keeps TS/JS outline fallback focused on direct class/interface members:
-    class methods sit at depth 1, while object-literal methods inside fields sit
-    deeper and should not be promoted as class methods.
+
+def _count_braces(text: str) -> int:
+    """Net brace count in a single line (+1 per `{`, -1 per `}`)."""
+    return text.count("{") - text.count("}")
+
+
+def _brace_depth_prefix(lines: list[str]) -> list[int]:
+    """Compute brace depth at the START of each line (prefix-sum).
+
+    Returns a list where result[i] is the depth before line i (0-indexed).
+    result[0] = 0 (depth before the first line). This is O(N) total and
+    allows O(1) lookup per line, replacing the old O(N*L) per-call approach.
     """
+    depths = [0]
     depth = 0
-    for line in lines[:max(0, line_no - 1)]:
-        for ch in line:
-            if ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth = max(0, depth - 1)
-    return depth
+    for line in lines:
+        depth = max(0, depth + _count_braces(line))
+        depths.append(depth)
+    return depths
+
 
 def _locate_line(file: str, name: str, kinds: set[str] | None = None) -> int | None:
     """Symbol start line via ctags, or None if not found. If `kinds` is given,
@@ -121,13 +128,14 @@ def _locate_line(file: str, name: str, kinds: set[str] | None = None) -> int | N
     _, out, _ = run([CTAGS, "--fields=+Kzn", "-f", "-", file])
     for line in out.splitlines():
         p = _parse_ctags_line(line)
-        if p and p[0] == name:
-            if kinds is not None and p[2] not in kinds:
-                continue
-            try:
-                return int(p[3])
-            except ValueError:
-                return None
+        if not p or p[0] != name:
+            continue
+        if kinds is not None and p[2] not in kinds:
+            continue
+        try:
+            return int(p[3])
+        except ValueError:
+            return None
     # Fallback for brace-langs (ctags TS/JS parser bug after generic-arg
     # field initializers). Cheap: only runs when ctags returns nothing.
     try:

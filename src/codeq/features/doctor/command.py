@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import platform
+import shlex
 import shutil
 import subprocess
 import sys
@@ -115,7 +116,10 @@ def _try_install(tool: dict[str, object]) -> str:
 def _run_install(name: str, mgr: str, cmd: str) -> str:
     """Execute CMD and return a one-line success/failure outcome."""
     print(f"  installing {name} via {mgr}: {cmd}", file=sys.stderr)
-    rc = subprocess.call(cmd, shell=True)
+    try:
+        rc = subprocess.call(shlex.split(cmd))
+    except (OSError, ValueError) as exc:
+        return f"FAILED {name} via {mgr} ({exc}); install manually"
     if rc == 0:
         return f"installed {name} via {mgr}"
     return f"FAILED {name} via {mgr} (rc={rc}); install manually"

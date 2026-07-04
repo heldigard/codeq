@@ -6,6 +6,21 @@ import sys
 
 from codeq.shared.search import search_lexical
 
+# Extension globs per language for the `refs` search.
+_LANG_INCLUDES: dict[str, list[str]] = {
+    "python": ["--include=*.py"],
+    "javascript": [
+        "--include=*.js",
+        "--include=*.mjs",
+        "--include=*.cjs",
+        "--include=*.jsx",
+    ],
+    "typescript": ["--include=*.ts", "--include=*.tsx"],
+    "go": ["--include=*.go"],
+    "rust": ["--include=*.rs"],
+    "java": ["--include=*.java"],
+}
+
 
 def _def_filter_re(lang: str, name: str) -> "re.Pattern[str]":
     """Regex matching a DECLARATION line of NAME, so `refs` can filter out the
@@ -31,15 +46,48 @@ def _def_filter_re(lang: str, name: str) -> "re.Pattern[str]":
         return re.compile(
             r"^[ \t]*(?:export\s+)?(?:async\s+)?"
             r"(?:\s*(?:public|private|protected|static|abstract|override|readonly|async)\s+)*"
-            r"(?:function\s+)?\*?\s*" + name_esc
+            r"(?:function\s+)?\*?\s*"
+            + name_esc
             + r"\s*(?:<[^<>]*(?:<[^<>]*>[^<>]*)*>)?\s*\(",
             re.MULTILINE,
         )
     # py/go/rust/...: keyword-led declarations only (safe — won't match calls)
     return re.compile(
         r"\b(?:def|class|function|fn|func|sub|struct|interface|enum|trait|impl)\s+"
-        + name_esc + r"\b"
+        + name_esc
+        + r"\b"
     )
+
+
+def get_refs(
+    name: str,
+    path: str,
+    lang: str | None = None,
+    limit: int = 200,
+) -> list[str]:
+    """Core refs logic: returns filtered reference lines (definitions excluded).
+
+    Pure function — no argparse, no stdout. Callers (cmd_refs, cmd_context,
+    cmd_relations) use this directly instead of constructing Namespace objects.
+
+    Returns ['file:line:text', ...] or empty list if no references found.
+    `limit=0` means unlimited."""
+    includes = _LANG_INCLUDES.get(lang or "", [])
+    lines = search_lexical(name, path, includes)
+    if not lines:
+        return []
+    def_re = _def_filter_re(lang or "", name)
+    result: list[str] = []
+    for line in lines:
+        m = re.match(r"^(.*?):(\d+):(.*)$", line)
+        if not m:
+            continue
+        if def_re.search(m.group(3)):
+            continue  # skip the declaration itself
+        result.append(line)
+        if limit and len(result) >= limit:
+            break
+    return result
 
 
 def cmd_refs(args: argparse.Namespace) -> int:
@@ -51,44 +99,16 @@ def cmd_refs(args: argparse.Namespace) -> int:
     shells `grep` is itself a function wrapping ugrep). Deterministic across
     environments. (Comments/strings can still match — ast-grep --lang is exact
     for that.)"""
-    includes = {
-        "python": ["--include=*.py"],
-        "javascript": [
-            "--include=*.js",
-            "--include=*.mjs",
-            "--include=*.cjs",
-            "--include=*.jsx",
-        ],
-        "typescript": ["--include=*.ts", "--include=*.tsx"],
-        "go": ["--include=*.go"],
-        "rust": ["--include=*.rs"],
-        "java": ["--include=*.java"],
-    }.get(args.lang, [])
-    lines = search_lexical(args.name, args.path, includes)
-    if not lines:
+    limit = getattr(args, "limit", 200) or 0
+    refs = get_refs(args.name, args.path, args.lang, limit=limit)
+    if not refs:
         print(f"no references to '{args.name}' under {args.path}", file=sys.stderr)
         return 1
-    def_re = _def_filter_re(args.lang, args.name)
-    total = 0
-    shown = 0
-    for line in lines:
-        m = re.match(r"^(.*?):(\d+):(.*)$", line)
-        if not m:
-            continue
-        if def_re.search(m.group(3)):
-            continue  # skip the declaration itself
-        total += 1
-        if shown < 200:
-            print(line)
-            shown += 1
-    if total == 0:
+    for line in refs:
+        print(line)
+    if limit and len(refs) >= limit:
         print(
-            f"'{args.name}' only appears in its definition(s) under {args.path}",
+            "... more references may exist (narrow with --path or increase --limit)",
             file=sys.stderr,
-        )
-        return 1
-    if total > shown:
-        print(
-            f"... {total - shown} more references (narrow with --path)", file=sys.stderr
         )
     return 0

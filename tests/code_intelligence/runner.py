@@ -16,6 +16,8 @@ from .test_codeq_core import (
     test_codeq_def_filter_re,
     test_codeq_doctor,
     test_codeq_java,
+    test_codeq_json_output,
+    test_codeq_limit_flag,
     test_codeq_map,
     test_codeq_modular_layout,
     test_codeq_rdeps,
@@ -107,6 +109,14 @@ def main() -> int:
                 "  codeq (refs def-filter regex per lang): OK",
             ),
             (test_codeq_doctor, "  codeq (doctor): OK"),
+            (
+                lambda: test_codeq_json_output(fixture_dir),
+                "  codeq (json output): OK",
+            ),
+            (
+                lambda: test_codeq_limit_flag(fixture_dir),
+                "  codeq (limit flag): OK",
+            ),
             (
                 test_codeq_summary_and_context_no_llm,
                 "  codeq (summary/context/relations --no-llm shape): OK",

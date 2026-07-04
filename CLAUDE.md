@@ -30,7 +30,11 @@ do not add MCP server code or an `mcp` dependency.
 ## Conventions
 - Vertical slices in `src/codeq/features/<feature>/`; shared infra in
   `src/codeq/shared/`. One feature = one responsibility.
-- Per-module **250-line budget** (enforced by `test_codeq_modular_layout`).
+- **Structural integrity** over line counts (enforced by `test_codeq_modular_layout`):
+  - Each feature slice has exactly one `command.py` (no stale copies)
+  - Shared modules never import from features (low coupling)
+  - Line count is advisory, not enforced — a cohesive 300-line module is better
+    than a 100-line module with mixed responsibilities
 - Lexical search (`refs`/`rdeps`) uses `shared/search.py`: ripgrep binary if
   present, else a pure-Python walker. **Never** the system `grep` (its behavior
   varies: GNU/ugrep/busybox/BSD).

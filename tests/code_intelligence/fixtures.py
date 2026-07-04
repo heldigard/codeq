@@ -54,6 +54,24 @@ public class CustomerService {
 }
 """
     )
+    (fixture_dir / "CustomerLombok.java").write_text(
+        """\
+package com.example;
+
+import lombok.Data;
+import lombok.Builder;
+import lombok.extern.slf4j.Slf4j;
+
+@Data
+@Builder
+@Slf4j
+public class CustomerLombok {
+    private Long id;
+    private String name;
+    private boolean active;
+}
+"""
+    )
 
 
 def write_typescript_fixtures(fixture_dir: Path) -> None:

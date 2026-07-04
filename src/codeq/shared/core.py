@@ -12,6 +12,7 @@ from codeq.shared.config import (
     VENDOR_EXCLUDES,
 )
 
+
 def die(msg: str, code: int = 2) -> NoReturn:
     print(f"codeq: {msg}", file=sys.stderr)
     sys.exit(code)

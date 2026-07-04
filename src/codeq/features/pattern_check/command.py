@@ -8,6 +8,7 @@ from pathlib import Path
 from codeq.shared.config import ASTGREP, PROBE
 from codeq.shared.core import die, run
 
+
 def cmd_check(args: argparse.Namespace) -> int:
     lang = args.lang or "python"
     probe = PROBE.get(lang)
@@ -19,7 +20,9 @@ def cmd_check(args: argparse.Namespace) -> int:
     # ast-grep exit code is NOT a validity signal (no-match valid patterns exit 1,
     # like grep). The authoritative signal is stderr: empty = clean parse.
     try:
-        _, _, err = run([ASTGREP, "run", "-p", args.pattern, "--lang", lang, probe_path])
+        _, _, err = run(
+            [ASTGREP, "run", "-p", args.pattern, "--lang", lang, probe_path]
+        )
     finally:
         Path(probe_path).unlink(missing_ok=True)
     err_s = err.strip()
@@ -32,7 +35,9 @@ def cmd_check(args: argparse.Namespace) -> int:
         verdict = "INVALID — pattern is NOT a single AST node."
         hint = "Wrap it in its complete parent statement (e.g. full try:/except:, not a lone 'except:')."
     elif "error node" in low:
-        verdict = "INVALID — pattern parsed but contains an ERROR node (invalid syntax)."
+        verdict = (
+            "INVALID — pattern parsed but contains an ERROR node (invalid syntax)."
+        )
         hint = "Refine the pattern; it will match nothing or behave unexpectedly."
     elif "cannot parse" in low or "error" in low:
         verdict = "INVALID — pattern failed to parse."
