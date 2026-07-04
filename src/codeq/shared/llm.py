@@ -27,14 +27,16 @@ _OLLAMA_DISABLED_PREFIX = (
 )
 
 # Model used for the `summary`/`context`/`relations`/`--summary` paths.
-# Default is the winner of the 2026-06-28 benchmark (5 models x 3 samples):
-# gemma-4-12B-it-qat was both FASTER (6-9s vs 15-31s) and higher-quality than
-# qwen3.5:4b on the summary task. Override with CODEQ_SUMMARY_MODEL (e.g. set
-# to "qwen3.5:4b" on a VRAM-tight host, or any other gen model). See
+# Default is the codeq_sum winner of the 2026-07-04 re-bench on Ollama 0.31.1
+# (combined-rank of deep + tie-break): batiai/gemma4-e4b:q4 was #1 on
+# codeq_sum (5.3 GB, fast + clean). The previous default Mobius/gemma-4-12B-it-qat
+# ranked #23 improve / #37 codeq_sum and was removed from the host lineup, so it
+# is no longer a safe default. Override with CODEQ_SUMMARY_MODEL (e.g. set to
+# "qwen3.5:4b" on a VRAM-tight host, or any other gen model). See
 # ~/.claude/scripts/codeq-model-bench.py to re-run the comparison.
 _CODEQ_SUMMARY_MODEL = os.environ.get(
     "CODEQ_SUMMARY_MODEL",
-    "MobiusDevelopment/gemma-4-12B-it-qat-q4_0-gguf:latest",
+    "batiai/gemma4-e4b:q4",
 )
 
 

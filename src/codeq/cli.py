@@ -66,7 +66,7 @@ examples:
     b.add_argument(
         "--summary",
         action="store_true",
-        help="prepend a 1-line Ollama summary (qwen3.5:4b) before the body; tagged so the consumer treats it as orientation, not truth",
+        help="prepend a 1-line Ollama summary (batiai/gemma4-e4b:q4 by default; override via CODEQ_SUMMARY_MODEL) before the body; tagged so the consumer treats it as orientation, not truth",
     )
     b.add_argument(
         "--no-llm",
