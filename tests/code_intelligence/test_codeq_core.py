@@ -421,3 +421,57 @@ def test_outline_regex_line_number_after_blank(tmp_path) -> None:  # type: ignor
     assert "getName" in jhits, (
         f"Java outline dropped public method after blank line: {jhits}"
     )
+
+
+def test_body_not_truncated_by_brace_in_comment(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Regression: a `}` inside a // line comment (or a string) must not
+    truncate brace-lang body extraction. The naive counter (str.count) treated
+    the comment's `}` as a closing brace and cut the body before the `return`."""
+    from codeq.shared.extraction import _class_body, _raw_body
+
+    ja = tmp_path / "Service.java"
+    ja.write_text(
+        "public class Service {\n"
+        '    public String greet() {\n'
+        "        // close } in comment\n"
+        '        return "x {y} z";\n'
+        "    }\n"
+        "    public int compute() {\n"
+        "        if (true) { return 42; }\n"
+        "        return 0;\n"
+        "    }\n"
+        "}\n"
+    )
+    # method body must reach past the comment brace to the return
+    body = _raw_body(str(ja), "greet", "java")
+    assert body is not None, "greet body not found"
+    assert "return" in body, f"greet body truncated by brace-in-comment: {body!r}"
+
+    # class body must include BOTH methods (comment/string braces must not
+    # prematurely close the class block)
+    cls = _class_body(str(ja), "Service", "java")
+    assert cls is not None, "Service class body not found"
+    assert "greet" in cls and "compute" in cls, (
+        f"class body truncated: greet={('greet' in cls)} compute={('compute' in cls)}"
+    )
+
+
+def test_body_not_truncated_by_brace_in_string(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Regression: braces inside a TS template literal / string must not distort
+    the brace count, so a method body containing them extracts whole."""
+    from codeq.shared.extraction import _raw_body
+
+    ts = tmp_path / "svc.ts"
+    ts.write_text(
+        "export class Svc {\n"
+        '  public build(): string {\n'
+        "    const map = { a: 1 };\n"
+        "    return `${map.a} of {total}`;\n"
+        "  }\n"
+        "}\n"
+    )
+    body = _raw_body(str(ts), "build", "typescript")
+    assert body is not None, "build body not found"
+    assert "return" in body and "total" in body, (
+        f"TS body truncated by brace-in-string: {body!r}"
+    )

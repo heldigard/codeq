@@ -11,7 +11,7 @@ from codeq.shared.config import (
     TYPE_KINDS,
 )
 from codeq.shared.core import run
-from codeq.shared.locators import _locate_line
+from codeq.shared.locators import _locate_line, _scan_braces
 
 
 def _astgrep_body(pattern: str, lang: str, file: str) -> str | None:
@@ -79,18 +79,34 @@ def _brace_extract(
 
 
 def _brace_collect(lines: list[str], start: int) -> str | None:
-    """Count braces from START line and return the body text. Extracted to
-    keep nesting ≤ 3 inside the per-line loop."""
+    """Count braces from START line and return the body text. Brace-aware
+    (strings/comments skipped via _scan_braces) so a `}` in a comment or
+    literal does not truncate the body. Extracted to keep nesting ≤ 3."""
     depth = 0
     begun = False
     out: list[str] = []
+    state: dict[str, bool] = {"in_block": False}
     for i in range(start - 1, len(lines)):
         out.append(lines[i])
-        depth += lines[i].count("{") - lines[i].count("}")
-        begun = begun or "{" in lines[i]
+        net, saw_open = _scan_braces(lines[i], state)
+        depth += net
+        begun = begun or saw_open
         if begun and depth <= 0:
             return "\n".join(out)
     return "\n".join(out) if begun else None
+
+
+def _lombok_synthetic_body(file: str, name: str) -> str | None:
+    """Synthetic body for a Lombok-generated method (signature + marker comment),
+    or None if NAME is not a Lombok member of FILE. Lombok methods are absent
+    from source, so emit a placeholder so `body`/`sig` still return something
+    useful. Extracted from _raw_body to keep nesting ≤ 3."""
+    from codeq.shared.lombok import detect_lombok_members
+
+    m = next((x for x in detect_lombok_members(file) if x.name == name), None)
+    if m is None:
+        return None
+    return f"{m.signature} {{\n    // lombok-generated {m.kind} from {m.source}\n}}"
 
 
 def _raw_body(file: str, name: str, lang: str) -> str | None:
@@ -100,10 +116,9 @@ def _raw_body(file: str, name: str, lang: str) -> str | None:
     if lang == "python":
         return _py_body(file, name)
     if lang == "java":
-        from codeq.shared.lombok import detect_lombok_members
-        for m in detect_lombok_members(file):
-            if m.name == name:
-                return f"{m.signature} {{\n    // lombok-generated {m.kind} from {m.source}\n}}"
+        synthetic = _lombok_synthetic_body(file, name)
+        if synthetic is not None:
+            return synthetic
     for pat in BODY_PATTERNS.get(lang, []):
         b = _astgrep_body(pat.replace("{N}", name), lang, file)
         if b:
