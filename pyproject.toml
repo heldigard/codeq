@@ -56,5 +56,9 @@ check_untyped_defs = true
 module = "ollama_client"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["tree_sitter", "tree_sitter.*", "tree_sitter_language_pack"]
+ignore_missing_imports = true
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/codeq"]

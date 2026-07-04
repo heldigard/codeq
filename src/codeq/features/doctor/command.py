@@ -70,6 +70,16 @@ TOOLS: list[dict[str, object]] = [
             "script": "curl -fsSL https://ollama.com/install.sh | sh",
         },
     },
+    {
+        "name": "tree-sitter",
+        "importance": "optional",
+        "python_module": "tree_sitter_language_pack",
+        "why": "AST-exact body extraction for JS/TS/Java/Go/Rust (closes the regex-literal-brace gap of the brace-count fallback)",
+        "managers": {
+            "pipx": "pipx inject codeq-cli tree-sitter tree-sitter-language-pack",
+            "npm": "npm install -g tree-sitter",
+        },
+    },
 ]
 
 # Managers tried first for `--install` (no root required).
@@ -77,7 +87,11 @@ NO_SUDO_MANAGERS = ["cargo", "npm", "pipx"]
 
 
 def _detect(name: str) -> tuple[str | None, str | None]:
-    """Return (path, first-line-of-version) for NAME, or (None, None)."""
+    """Return (path, first-line-of-version) for NAME, or (None, None).
+
+    Detects CLI binaries via PATH + `--version`. Tools that codeq consumes as
+    a Python module (not a CLI) declare a `python_module` key and are detected
+    via `importlib.util.find_spec` instead — `shutil.which` would miss them."""
     path = shutil.which(name)
     if not path:
         return None, None
@@ -89,6 +103,32 @@ def _detect(name: str) -> tuple[str | None, str | None]:
         return path, None
     out = (proc.stdout or proc.stderr or "").strip().splitlines()
     return path, (out[0] if out else None)
+
+
+def _detect_tool(tool: dict[str, object]) -> tuple[str | None, str | None]:
+    """Dispatch a tool's detection by how codeq consumes it: Python module
+    (importlib) or CLI binary (PATH + --version). Extracted so the report loop
+    reads `detected = _detect_tool(tool)` regardless of the tool's kind."""
+    mod = tool.get("python_module")
+    if isinstance(mod, str):
+        return _detect_python_module(mod)
+    return _detect(str(tool["name"]))
+
+
+def _detect_python_module(module: str) -> tuple[str | None, str | None]:
+    """Return (marker, version) when MODULE is importable, else (None, None).
+    The marker is `python:<module>` so the report reads as a detected path."""
+    import importlib.util
+
+    spec = importlib.util.find_spec(module)
+    if spec is None:
+        return None, None
+    try:
+        mod_obj = __import__(module)
+        ver = getattr(mod_obj, "__version__", None) or getattr(mod_obj, "VERSION", None)
+    except ImportError:
+        ver = None
+    return (f"python:{module}", str(ver) if ver else "(python module)")
 
 
 def _manager_available(manager: str) -> bool:
@@ -145,7 +185,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     # list comprehension, spawning `--version` twice per tool).
     detected: list[tuple[dict[str, object], str | None]] = []
     for tool in TOOLS:
-        path, ver = _detect(str(tool["name"]))
+        path, ver = _detect_tool(tool)
         detected.append((tool, path))
         status = "OK" if path else "MISSING"
         imp = str(tool["importance"])

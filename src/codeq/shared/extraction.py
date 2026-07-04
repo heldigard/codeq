@@ -65,8 +65,13 @@ def _brace_extract(
     counting. Fallback for nodes ast-grep cannot bind as a single pattern (TS/JS
     class methods, Java constructors, Java/Go/Rust class/struct decls). If
     `start` is given, brace-count from that line directly (used by the `class`
-    subcommand after locating the type-decl line). Approximate: braces inside
-    strings/comments are not skipped (rare in real bodies)."""
+    subcommand after locating the type-decl line).
+
+    Brace-aware: `_scan_braces` skips strings, char/template literals, and
+    line/block comments. The one residual blind spot is **regex literals with
+    unbalanced braces** (`const re = /a}b/`) — `_scan_braces` reads them as
+    code braces. tree-sitter (tried before this path when available) closes
+    that gap; this heuristic is the dep-free fallback."""
     if start is None:
         start = _locate_line(file, name) if name else None
     if not start:
@@ -111,8 +116,9 @@ def _lombok_synthetic_body(file: str, name: str) -> str | None:
 
 def _raw_body(file: str, name: str, lang: str) -> str | None:
     """Full def/class/method text. Python via ast (exact, methods); brace-langs
-    via ast-grep first (top-level, AST-exact) then brace-count (methods); other
-    langs return None (caller falls back to the ctags line)."""
+    via ast-grep first (top-level, AST-exact), then tree-sitter (AST-exact,
+    optional), then brace-count (methods); other langs return None (caller
+    falls back to the ctags line)."""
     if lang == "python":
         return _py_body(file, name)
     if lang == "java":
@@ -124,6 +130,9 @@ def _raw_body(file: str, name: str, lang: str) -> str | None:
         if b:
             return b
     if lang in BRACE_LANGS:
+        ts = _ts_body(file, name, lang)
+        if ts is not None:
+            return ts
         return _brace_extract(file, name)
     return None
 
@@ -144,17 +153,32 @@ def _sig_from_raw(raw: str, lang: str) -> str:
     return "\n".join(out).rstrip()
 
 
+def _ts_body(file: str, name: str, lang: str, want_type: bool = False) -> str | None:
+    """AST-exact body via tree-sitter when available, else None. Thin wrapper
+    so callers don't import the optional module directly. Extracted to keep
+    `_raw_body` / `_class_body` flat and the import lazy (tree-sitter is an
+    optional dep — importing at module load would break dep-free installs)."""
+    from codeq.shared.tree_sitter_extract import ts_available, ts_body
+
+    if not ts_available():
+        return None
+    return ts_body(name, file, lang, want_type=want_type)
+
+
 def _class_body(file: str, name: str, lang: str) -> str | None:
     """Full class/type-declaration body. Python via ast (ClassDef, exact);
-    TS/JS via ast-grep class pattern (AST-exact); Java/Go/Rust via brace-count
-    from the ctags type-decl line (ast-grep class/struct patterns do not bind
-    there). Returns None if no type named `name` is found."""
+    TS/JS via ast-grep class pattern (AST-exact), then tree-sitter (optional,
+    AST-exact); Java/Go/Rust via tree-sitter if present, else brace-count from
+    the ctags type-decl line. Returns None if no type named `name` is found."""
     if lang == "python":
         return _py_body(file, name, only_class=True)
     for pat in CLASS_BODY_PATTERNS.get(lang, []):
         b = _astgrep_body(pat.replace("{N}", name), lang, file)
         if b:
             return b
+    ts = _ts_body(file, name, lang, want_type=True)
+    if ts is not None:
+        return ts
     if lang in BRACE_LANGS:
         start = _locate_line(file, name, kinds=TYPE_KINDS)
         if start:
