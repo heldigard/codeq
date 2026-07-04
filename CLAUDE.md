@@ -25,7 +25,7 @@ do not add MCP server code or an `mcp` dependency.
 ## Entry points / subcommands
 `codeq` console script (`src/codeq/cli.py`): `find`, `outline`, `body`,
 `class`, `sig`, `deps`, `rdeps`, `refs`, `tags`, `check`, `map`, `summary`,
-`context`, `relations`, `doctor`.
+`context`, `relations`, `rename`, `doctor`.
 
 ## Conventions
 - Vertical slices in `src/codeq/features/<feature>/`; shared infra in
