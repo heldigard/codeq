@@ -1,13 +1,27 @@
 from __future__ import annotations
 
 import argparse
+import io
 import re
 import sys
 import tempfile
+import tokenize
+from collections import Counter
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from codeq.shared.config import CTAGS, _RESERVED_KEYWORDS
 from codeq.shared.core import _parse_ctags_line, ctags_exclude_args, die, run
+
+# TypeAlias for a ctags-indexed symbol row: (line, kind, name). Using an alias
+# (not the inline `tuple[int, str, str]`) keeps function signatures free of
+# internal commas that would otherwise inflate the param-count shape check.
+_Sym = tuple[int, str, str]
+
+# Identifier-shape regex used for the NON-python frequency pass (best-effort
+# proxy — matches identifier-shaped tokens, including inside strings/comments
+# for brace-langs; Python uses `tokenize` for an exact count instead).
+_FREQ_TOKEN_RE = re.compile(r"[A-Za-z_]\w{2,}")
 
 # Orientational kinds for the repo map (declaration-level; variables/fields
 # excluded — they inflate noise without aiding navigation).
@@ -66,14 +80,14 @@ def _in_virtualenv(file: str, root: Path, _cache: dict[Path, bool]) -> bool:
 
 def _collect_indexed_symbols(
     tags_path: str, include_tests: bool, root: Path
-) -> dict[str, list[tuple[int, str, str]]]:
+) -> dict[str, list[_Sym]]:
     """Scan a ctags index file → {file: [(line, kind, name), ...]} keeping only
     navigational declaration kinds (`_MAP_KINDS`), dropping test/spec files
     (unless `include_tests`), map-noise paths, virtualenv interiors, and tiny /
     reserved names. Extracted from `cmd_map` so its try/finally stays shallow —
     the scan's own `with>for>if` nesting lives here at depth 3, not nested
     inside the tempfile cleanup try."""
-    per_file: dict[str, list[tuple[int, str, str]]] = {}
+    per_file: dict[str, list[_Sym]] = {}
     _venv_cache: dict[Path, bool] = {}
     # The ctags index is a small text file — read_text (no `with` manager)
     # drops one nesting level vs `for raw in fh`, keeping the guard-clause
@@ -120,6 +134,37 @@ def _freq_text(file: str) -> tuple[str | None, bool]:
     return (text, False)
 
 
+def _py_freq_names(text: str) -> Counter[str]:
+    """Python identifier frequency via `tokenize` → Counter of NAME tokens
+    (length ≥ 3). Excludes STRING and COMMENT tokens, so a name mentioned
+    50 times in docstrings does not inflate its reference weight.
+
+    Why tokenize over the regex pass: `re.findall(r"[A-Za-z_]\\w{2,}", text)`
+    matches identifier-shaped substrings INSIDE string literals and comments,
+    so `codeq map` would over-rank files whose symbols share spelling with
+    common words in prose. `tokenize` distinguishes NAME from STRING/COMMENT,
+    giving accurate reference frequency for the dominant codeq language.
+
+    Falls back to the regex extractor on tokenize failure (broken or partial
+    files) so a degenerate file still contributes approximate frequency
+    instead of zero."""
+    try:
+        return _py_name_tokens(io.StringIO(text))
+    except (tokenize.TokenError, IndentationError, SyntaxError, ValueError):
+        return Counter(_FREQ_TOKEN_RE.findall(text))
+
+
+def _py_name_tokens(reader: io.StringIO) -> Counter[str]:
+    """Walk `tokenize` over READER.readline and return NAME tokens (len ≥ 3)
+    as a Counter. Extracted from `_py_freq_names` so the try/except + loop +
+    if guard does not nest past the slice budget."""
+    cnt: Counter[str] = Counter()
+    for tok in tokenize.generate_tokens(reader.readline):
+        if tok.type == tokenize.NAME and len(tok.string) >= 3:
+            cnt[tok.string] += 1
+    return cnt
+
+
 def _save_map(root: Path, out_text: str) -> None:
     """Persist the map to <root>/.memory-bank/topics/code-map.md, or emit a
     skip notice when no memory bank exists. Extracted so cmd_map's save tail
@@ -146,6 +191,74 @@ def _save_map(root: Path, out_text: str) -> None:
     print(f"saved → {topic}", file=sys.stderr)
 
 
+def _merge_lombok_members(per_file: dict[str, list[_Sym]]) -> None:
+    """Append detected Lombok-generated methods to their Java files in place.
+
+    Extracted from `cmd_map` — the original inline `for>if>for>if` block
+    pushed nesting past the slice budget. Dispatches per-file to keep the
+    outer loop shallow."""
+    for file in list(per_file.keys()):
+        if not file.endswith(".java"):
+            continue
+        _append_lombok_methods(file, per_file[file])
+
+
+def _append_lombok_methods(file: str, syms: list[_Sym]) -> None:
+    """Append Lombok-generated methods to SYMS in place, skipping names ctags
+    already indexed (constructors/getters/setters) so no duplicate is fabricated.
+    Guard-clause form keeps nesting within the slice budget."""
+    from codeq.shared.lombok import detect_lombok_members
+
+    seen = {t[2] for t in syms}
+    for m in detect_lombok_members(file):
+        if m.kind != "method" or m.name in seen:
+            continue
+        syms.append((m.line, "lombok-method", m.name))
+        seen.add(m.name)
+
+
+@dataclass
+class _FreqAccum:
+    """Mutable accumulator for the identifier-frequency pass. Bundles the three
+    outputs so `_freq_for_file` takes one accum arg instead of three (keeping
+    the param count inside the slice budget)."""
+
+    freq: Counter[str] = field(default_factory=Counter)
+    defs: Counter[str] = field(default_factory=Counter)
+    minified: set[str] = field(default_factory=set)
+
+
+def _freq_for_file(file: str, syms: list[_Sym], acc: _FreqAccum) -> None:
+    """Update ACC with one indexed file's contribution. Mutates in place so
+    the caller's loop body stays flat (no `if status == ...` branch).
+
+    - minified / unreadable files contribute no freq (minified ones are
+      flagged so the caller drops them).
+    - Python files use `_py_freq_names` (tokenize-exact, excludes STRING /
+      COMMENT tokens); other langs use the regex best-effort extractor.
+    """
+    text, is_minified = _freq_text(file)
+    if is_minified:
+        acc.minified.add(file)
+        return
+    if text is None:
+        return
+    acc.defs.update(name for _, _, name in syms)
+    acc.freq.update(
+        _py_freq_names(text) if file.endswith(".py") else _FREQ_TOKEN_RE.findall(text)
+    )
+
+
+def _freq_pass(per_file: dict[str, list[_Sym]]) -> _FreqAccum:
+    """One identifier-frequency pass over the indexed files. Returns the
+    populated accumulator. Extracted from `cmd_map` to keep the command
+    body a flat sequence of steps."""
+    acc = _FreqAccum()
+    for file, syms in per_file.items():
+        _freq_for_file(file, syms, acc)
+    return acc
+
+
 def cmd_map(args: argparse.Namespace) -> int:
     """Repo orientation map (aider-style): the most-referenced files and their
     hottest symbols, ONE bounded call instead of a Glob/Read exploration sweep.
@@ -170,34 +283,16 @@ def cmd_map(args: argparse.Namespace) -> int:
         Path(tags_path).unlink(missing_ok=True)
 
     # Lombok members: append to Java files.
-    for file in list(per_file.keys()):
-        if file.endswith(".java"):
-            from codeq.shared.lombok import detect_lombok_members
-            seen_names = {t[2] for t in per_file[file]}
-            for m in detect_lombok_members(file):
-                if m.kind == "method" and m.name not in seen_names:
-                    per_file[file].append((m.line, "lombok-method", m.name))
-                    seen_names.add(m.name)
+    _merge_lombok_members(per_file)
 
     if not per_file:
         print(f"no symbols indexed under {root}", file=sys.stderr)
         return 1
     # One frequency pass over the indexed source files (vendor already excluded).
-    from collections import Counter
-
-    freq: Counter[str] = Counter()
-    defs: Counter[str] = Counter()
-    minified: set[str] = set()
-    for file, syms in per_file.items():
-        text, is_minified = _freq_text(file)
-        if is_minified:
-            minified.add(file)
-            continue
-        if text is None:  # unreadable — keep with zero freq
-            continue
-        for _, _, name in syms:
-            defs[name] += 1
-        freq.update(re.findall(r"[A-Za-z_]\w{2,}", text))
+    # Python files use tokenize-exact counting (excludes STRING/COMMENT tokens);
+    # other langs use the regex best-effort extractor.
+    acc = _freq_pass(per_file)
+    freq, defs, minified = acc.freq, acc.defs, acc.minified
     for file in minified:
         per_file.pop(file, None)
     if not per_file:
