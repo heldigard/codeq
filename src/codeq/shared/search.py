@@ -11,6 +11,7 @@ identical across GNU/ugrep/busybox/BSD environments.
 
 from __future__ import annotations
 
+import ast
 import fnmatch
 import os
 import re
@@ -100,6 +101,100 @@ def _rg_search(
     if proc.returncode not in (0, 1):  # 0 = matches, 1 = no matches
         return None
     return proc.stdout.splitlines()
+
+
+def search_py_refs(name: str, path: str) -> list[str]:
+    """Semantic Python references via the `ast` module → `['file:line:text']`.
+
+    Matches only real `Name` / `Attribute` / import-alias nodes, so it is
+    immune to the comment / string / keyword-argument-name false positives
+    that `search_lexical` (word-boundary) produces. The definition line
+    (`def name(...)` / `class name`) is naturally absent — `ast` does not
+    emit a `Name` node for the declaration identifier, so no def-filter
+    regex is needed on the caller side.
+
+    Walks PATH with the same VENDOR_EXCLUDES / FILE_EXCLUDES pruning as the
+    lexical search. Unparseable files contribute no rows (no crash). Returns
+    rows sorted by file-then-line on a best-effort basis (walk order).
+
+    Why ast (not rg) for python refs: rg cannot distinguish a call from a
+    comment or a kwarg name without a parser; the `ast` module is in the
+    stdlib, has no external dep, and already powers `body` / `outline` /
+    `deps` — this is the same tool applied to the references problem. For
+    non-python langs, `get_refs` keeps the lexical path (AST coverage of
+    those langs would need tree-sitter, an optional future add).
+    """
+    root = Path(path)
+    files = [root] if root.is_file() else _walk_files(root)
+    out: list[str] = []
+    for f in files:
+        if f.suffix != ".py":
+            continue
+        out.extend(_py_refs_in_file(name, f))
+    return out
+
+
+def _py_refs_in_file(name: str, f: Path) -> list[str]:
+    """AST refs for ONE python file. Returns rows in source order (line-num
+    ascending), deduped per line (a `Name` and an `Attribute` on the same
+    line yield a single row). Returns [] on syntax error / IO error so the
+    caller's walk continues with the next file."""
+    try:
+        src = f.read_text(errors="replace")
+        tree = ast.parse(src, filename=str(f))
+    except (SyntaxError, OSError, ValueError):
+        return []
+    lines = src.splitlines()
+    rows: list[str] = []
+    seen: set[int] = set()
+    matches: list[int] = []
+    for node in ast.walk(tree):
+        lineno = _py_ref_lineno(node, name)
+        if lineno is not None and lineno not in seen:
+            seen.add(lineno)
+            matches.append(lineno)
+    for lineno in sorted(set(matches)):
+        text = lines[lineno - 1] if 0 < lineno <= len(lines) else ""
+        rows.append(f"{f}:{lineno}:{text}")
+    return rows
+
+
+def _py_ref_lineno(node: ast.AST, name: str) -> int | None:
+    """Line of NODE if it is a reference to NAME, else None.
+
+    - `ast.Name(id=name)` — bare identifier reference (`foo`, `foo()`).
+    - `ast.Attribute(attr=name)` — member access (`obj.foo`).
+    - `ast.Import` / `ast.ImportFrom` — an `alias` whose imported name or
+      final segment or asname equals NAME. `from m import foo`,
+      `import pkg.foo`, and `from m import foo as bar` all count (the
+      symbol enters this module here).
+
+    `keyword.arg` (kwarg names in `bar(foo=1)`) is a plain string on the
+    `keyword` node, NOT an `ast.Name`, so it is naturally excluded — that
+    is the false positive the AST path eliminates vs lexical."""
+    if isinstance(node, ast.Name):
+        return node.lineno if node.id == name else None
+    if isinstance(node, ast.Attribute):
+        return node.lineno if node.attr == name else None
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        return _import_alias_lineno(node, name)
+    return None
+
+
+def _import_alias_lineno(node: ast.AST, name: str) -> int | None:
+    """Line of an `import` / `from ... import` statement that binds NAME.
+    Matched when the imported name, its final dotted segment, or its asname
+    equals NAME. Extracted from `_py_ref_lineno` to keep nesting shallow
+    (the for+if branch would otherwise push depth past the slice budget)."""
+    for alias in getattr(node, "names", []):
+        if (
+            alias.name == name
+            or alias.name.endswith("." + name)
+            or alias.asname == name
+        ):
+            lineno = getattr(node, "lineno", 0)
+            return lineno or None
+    return None
 
 
 def _py_search(pattern: str, path: str, includes: list[str], word: bool) -> list[str]:

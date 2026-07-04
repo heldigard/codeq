@@ -4,7 +4,7 @@ import argparse
 import re
 import sys
 
-from codeq.shared.search import search_lexical
+from codeq.shared.search import search_lexical, search_py_refs
 
 # Extension globs per language for the `refs` search.
 _LANG_INCLUDES: dict[str, list[str]] = {
@@ -59,6 +59,22 @@ def _def_filter_re(lang: str, name: str) -> "re.Pattern[str]":
     )
 
 
+def _refs_lines(name: str, path: str, lang: str) -> list[str]:
+    """Pick the reference-finder backend by language.
+
+    - python → `search_py_refs` (AST-exact; no comment/string/kwarg noise).
+    - other  → `search_lexical` (ripgrep / Python walker, word-boundary).
+
+    AST is stdlib-only and already powers `body`/`outline`/`deps`; for python
+    it strictly dominates lexical (which can match comments and strings). The
+    other brace-langs have no stdlib AST available, so they keep the lexical
+    path until an optional tree-sitter integration lands."""
+    if lang == "python":
+        return search_py_refs(name, path)
+    includes = _LANG_INCLUDES.get(lang, [])
+    return search_lexical(name, path, includes)
+
+
 def get_refs(
     name: str,
     path: str,
@@ -72,8 +88,7 @@ def get_refs(
 
     Returns ['file:line:text', ...] or empty list if no references found.
     `limit=0` means unlimited."""
-    includes = _LANG_INCLUDES.get(lang or "", [])
-    lines = search_lexical(name, path, includes)
+    lines = _refs_lines(name, path, lang or "")
     if not lines:
         return []
     def_re = _def_filter_re(lang or "", name)
