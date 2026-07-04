@@ -11,6 +11,7 @@ from codeq.features.repo_map.command import cmd_map
 from codeq.features.pattern_check.command import cmd_check
 from codeq.features.symbol_search.command import cmd_find, cmd_outline
 from codeq.features.references.command import cmd_refs
+from codeq.features.rename.command import cmd_rename
 from codeq.features.tags.command import cmd_tags
 
 # vs-soft-allow — argparse subparser defs carry long multi-line help strings
@@ -213,6 +214,32 @@ examples:
     )
     rl.set_defaults(func=cmd_relations)
 
+    rn = sub.add_parser(
+        "rename",
+        help="AST-exact structural rename via ast-grep (strings/comments/kwargs never touched)",
+    )
+    rn.add_argument("old", help="identifier to rename")
+    rn.add_argument("new", help="new identifier")
+    rn.add_argument(
+        "-p",
+        "--path",
+        default=".",
+        help="file or directory to rewrite in place (default: cwd)",
+    )
+    rn.add_argument(
+        "-l",
+        "--lang",
+        default=None,
+        help="ast-grep language; default python. Supported: see --help / doctor.",
+    )
+    rn.add_argument(
+        "-n",
+        "--dry-run",
+        action="store_true",
+        help="report match count without writing",
+    )
+    rn.set_defaults(func=cmd_rename)
+
     doc = sub.add_parser(
         "doctor",
         help="check required/optional external binaries and (with --install) install missing ones",
@@ -231,5 +258,6 @@ examples:
 
         return run_with_json(args)
     from typing import Callable
+
     func: Callable[[argparse.Namespace], int] = args.func
     return func(args)
