@@ -60,7 +60,20 @@ def _rg_search(
     rg: str, pattern: str, path: str, includes: list[str], word: bool
 ) -> list[str] | None:
     """ripgrep invocation. Returns lines, or None to fall back to Python
-    (only on a non-recoverable rg failure / unexpected exit code)."""
+    (only on a non-recoverable rg failure / unexpected exit code).
+
+    Output format MUST stay `file:line:text` to match `_py_search` and the
+    `file:line:text` contract documented on `search_lexical`. Do NOT add
+    `-I`: in rg `-I` means `--no-filename` (it overrides `--with-filename`
+    and silently drops the file prefix, breaking every consumer that splits
+    on the first two `:`). rg skips binary files by default already, so the
+    grep-style `-I` (ignore-binary) intent is moot here.
+
+    `--fixed-strings` makes rg treat PATTERN as a literal (not regex), giving
+    parity with `_py_search`'s `re.escape`. Without it, rg would match `a.b`
+    against `aXb` (`.` = any char) — a false-positive source for callers
+    that pass dotted symbol names like `MyClass.method`. `-F` composes with
+    `-w` (literal pattern + word boundaries)."""
     cmd = [
         rg,
         "--line-number",
@@ -68,7 +81,7 @@ def _rg_search(
         "--no-heading",
         "--color=never",
         "--no-ignore",
-        "-I",
+        "--fixed-strings",
     ]
     if word:
         cmd.append("-w")
