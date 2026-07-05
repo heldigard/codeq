@@ -27,7 +27,13 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path.home() / ".claude" / "scripts"))
+try:
+    shared_scripts = Path(__file__).resolve().parents[2] / ".claude" / "scripts"
+except IndexError:
+    shared_scripts = Path.home() / ".claude" / "scripts"
+if not (shared_scripts / "ollama_client.py").exists():
+    shared_scripts = Path.home() / ".claude" / "scripts"
+sys.path.insert(0, str(shared_scripts))
 import ollama_client  # type: ignore[import-not-found]
 
 from _bench_samples import SAMPLES
