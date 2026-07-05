@@ -90,3 +90,30 @@ def test_rename_rejects_unsupported_lang() -> None:
         rc, _, err = _run_cli("rename", "foo", "bar", "-p", tmp, "-l", "cobol")
         assert rc != 0, "unsupported-lang rename unexpectedly succeeded"
         assert "lang" in err.lower(), f"unclear error: {err}"
+
+
+def test_rename_dry_run_count_is_exact_not_lines() -> None:
+    """`--dry-run` reports the EXACT match count (3), not the inflated
+    non-empty output-line count (~12: `@@` header + 7 diff lines + 4
+    context lines). The previous implementation counted output lines of
+    ast-grep's unified-diff-style scan, which inflates ~3× for typical
+    matches and breaks the dry-run signal — users saw "~12 match line(s)"
+    for a file with 3 matches and skipped the rewrite.
+
+    Fix: a second ast-grep call with `--json=compact` returns one JSON
+    object per match; `len(...)` is exact."""
+    with tempfile.TemporaryDirectory() as tmp:
+        f = Path(tmp) / "a.py"
+        f.write_text(
+            "def foo():\n    if True:\n        return 1\n    return 2\n\nfoo()\nfoo()\n"
+        )
+        rc, out, _ = _run_cli("rename", "foo", "bar", "-p", str(f), "-n")
+        assert rc == 0, f"dry-run failed: rc={rc} out={out}"
+        # 3 real matches: the def + 2 calls. The buggy version reported
+        # "~12 match line(s)" (counted non-empty output lines incl. header +
+        # context). The exact fix says "3 matches" without a tilde.
+        assert "3 matches" in out, f"expected exact '3 matches', got: {out!r}"
+        assert "~" not in out.splitlines()[0], (
+            f"dry-run should not use approximate '~' qualifier when exact "
+            f"count is available: {out!r}"
+        )

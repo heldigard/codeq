@@ -60,7 +60,13 @@ def cmd_rename(args: argparse.Namespace) -> int:
         print(f"ast-grep error: {err.strip() or f'rc={rc}'}", file=sys.stderr)
         return 2
     if args.dry_run:
-        return _report_dry_run(old, new, lang, args.path, out)
+        # Dry-run asks for JSON to get an EXACT match count (the previous
+        # text-output count was ~3× off: it counted diff header + context
+        # lines as matches). Run a SECOND ast-grep call with --json=compact
+        # — the cost is acceptable (dry-run is a preview, not a hot path),
+        # and the accuracy makes the dry-run report actionable.
+        n_matches = _count_dry_run_matches(old, new, lang, args.path)
+        return _report_dry_run(old, new, lang, args.path, n_matches)
     summary = _parse_applied_count(err) or out.strip() or "(no changes)"
     print(f"renamed {old} → {new} (lang={lang}, path={args.path}).")
     print(summary)
@@ -117,15 +123,47 @@ def _run_astgrep(
     return run(cmd)
 
 
-def _report_dry_run(old: str, new: str, lang: str, path: str, out: str) -> int:
-    """Summarize ast-grep's scan-mode output as an approximate match count.
+def _count_dry_run_matches(old: str, new: str, lang: str, path: str) -> int:
+    """EXACT match count for a dry-run via ast-grep `--json=compact`.
 
-    In scan mode (no `--update-all`) ast-grep prints one match block per hit.
-    Counting non-empty output lines is a cheap, robust proxy — exact match
-    counts would need JSON parsing and the number is informational anyway."""
-    matches = [ln for ln in out.splitlines() if ln.strip()]
+    The text output of `ast-grep run -p` is a unified-diff-style block whose
+    non-empty lines include a `@@ ... @@` header + context lines, not just
+    matches — counting them inflates the report ~3× (e.g. a file with 3
+    matches and 4 context lines reported "~12"). `--json=compact` prints one
+    JSON object per match; `len(json.loads(...))` is exact.
+
+    Falls back to 0 on ast-grep failure (the caller already validated the
+    invocation succeeded once; a JSON re-run that fails is treated as
+    'unable to count precisely' rather than masking the dry-run report)."""
+    import json as _json
+
+    cmd = [
+        ASTGREP,
+        "run",
+        "--pattern",
+        old,
+        "--rewrite",
+        new,
+        "--lang",
+        lang,
+        "--json=compact",
+        path,
+    ]
+    rc, out, _ = run(cmd)
+    if rc not in (0, 1) or not out.strip():
+        return 0
+    try:
+        return len(_json.loads(out))
+    except _json.JSONDecodeError:
+        return 0
+
+
+def _report_dry_run(old: str, new: str, lang: str, path: str, n_matches: int) -> int:
+    """Print a precise dry-run report. N_MATCHES is the EXACT count from
+    `_count_dry_run_matches` — no `~` qualifier, no inflated line count."""
+    word = "match" if n_matches == 1 else "matches"
     print(
-        f"DRY RUN: ~{len(matches)} match line(s) would be rewritten "
+        f"DRY RUN: {n_matches} {word} would be rewritten "
         f"({old} → {new}, lang={lang}, path={path})."
     )
     print("Re-run without --dry-run to apply.")

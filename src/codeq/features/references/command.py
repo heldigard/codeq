@@ -19,6 +19,7 @@ _LANG_INCLUDES: dict[str, list[str]] = {
     "go": ["--include=*.go"],
     "rust": ["--include=*.rs"],
     "java": ["--include=*.java"],
+    "bash": ["--include=*.sh", "--include=*.bash"],
 }
 
 
@@ -50,6 +51,17 @@ def _def_filter_re(lang: str, name: str) -> "re.Pattern[str]":
             + name_esc
             + r"\s*(?:<[^<>]*(?:<[^<>]*>[^<>]*)*>)?\s*\(",
             re.MULTILINE,
+        )
+    if lang == "bash":
+        # Bash has two function-declaration forms:
+        #   function name() { ... }   (keyword + parens)
+        #   function name { ... }     (keyword, no parens)
+        #   name() { ... }            (no keyword, bare word + parens)
+        # The generic fallback catches the `function` keyword forms but misses
+        # `name() {`, which is the most common style. Filter all three.
+        return re.compile(
+            r"^\s*(?:function\s+)?" + name_esc + r"\s*\(\s*\)\s*\{"
+            r"|^\s*function\s+" + name_esc + r"\s*\{"
         )
     # py/go/rust/...: keyword-led declarations only (safe — won't match calls)
     return re.compile(

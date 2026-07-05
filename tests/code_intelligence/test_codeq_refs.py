@@ -133,3 +133,43 @@ def test_get_refs_lexical_for_non_python() -> None:
         # be ABSENT under the python AST path (which never matches strings).
         # Its presence proves the non-python dispatch goes through lexical.
         assert any("'foo'" in r for r in rows), rows
+
+
+def test_bash_refs_filters_bare_function_declaration() -> None:
+    """Bash `name() { ... }` (no `function` keyword) is a declaration, not a
+    call. The generic def-filter misses this form because it requires a
+    keyword. Regression: refs showed the declaration line as a reference."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write(
+            root,
+            "lib.sh",
+            "shared_func() {\n    echo ok\n}\nshared_func\n",
+        )
+        rows = get_refs("shared_func", str(root), lang="bash")
+        assert any("shared_func" in r and "echo" not in r for r in rows), (
+            f"call missing: {rows}"
+        )
+        # The declaration line `shared_func() {` must NOT appear as a ref.
+        decls = [r for r in rows if "shared_func()" in r and "{" in r]
+        assert decls == [], f"bare-func declaration leaked into refs: {rows}"
+
+
+def test_bash_refs_filters_function_keyword_declaration() -> None:
+    """Bash `function name() { ... }` and `function name { ... }` are both
+    declarations — the keyword-led def-filter must catch them."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write(
+            root,
+            "lib.sh",
+            "function my_func() {\n    echo ok\n}\nfunction other_func {\n    echo ok\n}\nmy_func\n",
+        )
+        rows = get_refs("my_func", str(root), lang="bash")
+        assert any(
+            "my_func" in r and "echo" not in r and "function" not in r for r in rows
+        ), f"call missing: {rows}"
+        # The declaration lines must NOT appear as refs.
+        assert not any("function my_func" in r for r in rows), (
+            f"function-keyword declaration leaked: {rows}"
+        )

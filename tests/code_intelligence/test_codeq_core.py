@@ -37,6 +37,25 @@ def test_codeq(fixture_dir: Path) -> None:
     assert result.returncode == 0, f"codeq check failed: {result.stderr}"
 
 
+def test_codeq_check_java_probe() -> None:
+    """`codeq check -l java` must NOT die with 'no probe for lang'. Java is
+    already supported by `codeq rename` and by body extraction (BODY_PATTERNS),
+    so the check subcommand — a pre-flight validator for ast-grep patterns —
+    should be in parity. Bug: PROBE dict in shared/config.py listed only
+    python/javascript/typescript/go/rust, even though ast-grep handles java
+    and codeq rename has supported java since v1.6.0."""
+    result = run(
+        ["codeq", "check", "void foo($$$A) { $$$B }", "-l", "java"], check=False
+    )
+    assert "no probe for lang" not in result.stderr, (
+        f"check refused java even though rename + body support it: "
+        f"{result.stdout}{result.stderr}"
+    )
+    assert result.returncode == 0, (
+        f"valid java pattern should validate cleanly: {result.stdout}{result.stderr}"
+    )
+
+
 def test_codeq_java(fixture_dir: Path) -> None:
     """Java symbol extraction. `outline <Class>` lists members — the supported
     workaround for the codeq Java class-body limitation (body of a class would

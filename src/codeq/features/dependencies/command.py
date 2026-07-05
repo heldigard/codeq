@@ -129,6 +129,7 @@ _INCLUDES_BY_LANG: dict[str, list[str]] = {
     "go": ["--include=*.go"],
     "rust": ["--include=*.rs"],
     "java": ["--include=*.java"],
+    "bash": ["--include=*.sh", "--include=*.bash"],
 }
 
 

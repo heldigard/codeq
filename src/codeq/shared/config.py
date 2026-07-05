@@ -227,4 +227,9 @@ PROBE: dict[str, str] = {
     "typescript": "let x = 1;\n",
     "go": "package p\n",
     "rust": "fn _main() {}\n",
+    # Minimal valid Java for ast-grep pattern parsing. A bare class with empty
+    # body parses cleanly across tree-sitter-java; methods inside are unnecessary
+    # for pattern validation (probe is syntactic context, not a target). Parity:
+    # rename + body extraction already support java.
+    "java": "class _P {}\n",
 }
