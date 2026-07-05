@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, cast
 
 # tree-sitter node types that DECLARE a function/method body, per language.
 # Verified against tree-sitter-language-pack 1.12 (2026-07-04) by probing each
@@ -112,6 +112,9 @@ def ts_body(name: str, file: str, lang: str, want_type: bool = False) -> str | N
         if node.type not in types:
             continue
         if _declared_name(node) == name:
+            # `src` is bytes; node byte offsets are typed Any (optional dep)
+            # but bytes.__getitem__(slice[Any, Any]) returns bytes, so .decode
+            # is correctly inferred to return str here. No cast needed.
             return src[node.start_byte : node.end_byte].decode("utf-8", "replace")
     return None
 
@@ -156,5 +159,9 @@ def _declared_name(node: Any) -> str | None:
     in every grammar probed."""
     for child in node.children:
         if child.type in _NAME_FIELD_TYPES:
-            return child.text.decode("utf-8", "replace")
+            # child.text is bytes at runtime but typed as Any (optional dep).
+            # Cast to silence mypy --no-any-return without losing precision
+            # for the consumer (str | None is the declared return).
+            text = cast(bytes, child.text)
+            return text.decode("utf-8", "replace")
     return None

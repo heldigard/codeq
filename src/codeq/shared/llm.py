@@ -5,7 +5,15 @@ import sys
 from pathlib import Path
 
 # Best-effort path injection for the shared local-Ollama client.
-_HARNESS_SCRIPTS = Path.home() / ".claude" / "scripts"
+# Default lives under ~/.claude/scripts (the canonical cross-CLI scripts
+# dir on this host) but is overridable via `CODEQ_HARNESS_SCRIPTS` so the
+# codeq package stays portable to other homes / containers where the
+# harness lives elsewhere (or is absent — in which case ollama_client is
+# simply not importable and `_llm_status` returns ok=False with a clear
+# reason; callers print the disabled banner and continue).
+_HARNESS_SCRIPTS = Path(
+    os.environ.get("CODEQ_HARNESS_SCRIPTS", str(Path.home() / ".claude" / "scripts"))
+)
 if _HARNESS_SCRIPTS.is_dir():
     sys.path.insert(0, str(_HARNESS_SCRIPTS))
 
@@ -145,12 +153,14 @@ def _maybe_emit_summary(
     The banner also reports the measured cold latency (honest, not a guess)."""
     summary, source, cold = _summarize_code(file_path, name, body, no_llm=no_llm)
     if summary:
-        print(
-            _OLLAMA_SUMMARY_PREFIX.format(
-                model=source or "local-llm",
-                lat=f"{cold:.1f}" if cold else "?",
-            )
+        # Build the banner as a local first so the .format() kwargs don't sit
+        # inside the print() call (was 4 levels of indent). Kept inside the
+        # `if summary:` branch so the variable is provably bound when used.
+        banner = _OLLAMA_SUMMARY_PREFIX.format(
+            model=source or "local-llm",
+            lat=f"{cold:.1f}" if cold else "?",
         )
+        print(banner)
         print(f"# {summary}")
         print("# [body follows — read it to verify the summary before reasoning]")
         print()

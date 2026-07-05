@@ -182,3 +182,56 @@ def test_codeq_excludes_vendor() -> None:
         tags_path = proj / ".tags"
         run(["codeq", "tags", "-p", str(proj), "-o", str(tags_path)])
         _assert_src_only(tags_path.read_text())
+
+
+def _build_aider_wildcard_project(root: Path) -> Path:
+    """Project where the only TS file lives under `.aider.chat.history` —
+    a directory whose name matches the VENDOR_EXCLUDES wildcard entry
+    `.aider*` (see codeq.shared.config). The bug pre-fix: ``_walk_source_files``
+    used ``p in VENDOR_EXCLUDES`` (exact equality), so this wildcard entry
+    silently leaked Aider wildcard-segment cache dirs through the find
+    fallback sweep. The primary ctags pass already excluded them via
+    ``ctags --exclude='.aider*'``, so this test exercises the SECONDARY
+    brace-lang regex sweep / Lombok walk in `cmd_find` (called only when
+    ctags primary returns 0 hits) by giving ctags nothing it can index
+    (no .py / .ts files in src/) — the TS file in `.aider.chat.history/`
+    alone would otherwise be picked up by ctags. After the fix, the fnmatch
+    filter excludes it and find returns no hits."""
+    proj = root / "proj"
+    (proj / ".aider.chat.history").mkdir(parents=True)
+    (proj / ".aider.tags.cache").mkdir(parents=True)
+    (proj / "src").mkdir(parents=True)
+    # Symbol only in the wildcard-segment dir.
+    (proj / ".aider.chat.history" / "notes.ts").write_text(
+        "export class AiderOnly {\n  run(): void {}\n}\n"
+    )
+    (proj / ".aider.tags.cache" / "stuff.ts").write_text(
+        "export class TagsCacheOnly {\n  run(): void {}\n}\n"
+    )
+    # Empty src to keep ctags primary pass empty (forces the fallback sweep).
+    (proj / "src" / ".keep").write_text("")
+    return proj
+
+
+def test_codeq_find_excludes_aider_wildcard_segments() -> None:
+    """Regression: `codeq find` must exclude VENDOR_EXCLUDES wildcards
+    (not just literal entries) in the brace-lang fallback sweep. Pre-fix
+    this asserted on `/workspace/proj/.aider.chat.history` leaking through
+    `codeq find AiderOnly -p ...`. Asserted end-to-end via the CLI so
+    the test fails on any future regression of the filter uniform
+    semantics (rg / ctags / pure-Python walker / find fallback)."""
+    from .helpers import run  # local re-import keeps the test self-contained
+
+    with tempfile.TemporaryDirectory() as tmp:
+        proj = _build_aider_wildcard_project(Path(tmp))
+        for sym in ("AiderOnly", "TagsCacheOnly"):
+            result = run(["codeq", "find", sym, "-p", str(proj)], check=False)
+            # `.aider.chat.history` and `.aider.tags.cache` must NOT appear.
+            assert ".aider" not in result.stdout, (
+                f"codeq find {sym} leaked VENDOR_EXCLUDES wildcard dir: "
+                f"{result.stdout!r}"
+            )
+            assert "no symbol named" in result.stderr or result.returncode != 0, (
+                f"expected no-hit for {sym} (only files are in wildcard dirs), "
+                f"got stdout={result.stdout!r} stderr={result.stderr!r}"
+            )

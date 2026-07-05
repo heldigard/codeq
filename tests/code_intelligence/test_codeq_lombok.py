@@ -242,7 +242,9 @@ def test_lombok_body_and_sig(fixture_dir: Path) -> None:
 
 def test_lombok_repo_map(fixture_dir: Path) -> None:
     """codeq map lists Lombok-generated methods for Java files."""
-    result = run(["codeq", "map", "-p", str(fixture_dir), "--top", "50", "--syms", "10"])
+    result = run(
+        ["codeq", "map", "-p", str(fixture_dir), "--top", "50", "--syms", "10"]
+    )
     assert "CustomerLombok.java" in result.stdout
     assert "getId" in result.stdout
     assert "lombok-method" in result.stdout

@@ -415,7 +415,7 @@ def test_outline_regex_line_number_after_blank(tmp_path) -> None:  # type: ignor
     ja = tmp_path / "S.java"
     ja.write_text(
         "package x;\npublic class S {\n\n"
-        "    public String getName() {\n        return \"x\";\n    }\n}\n"
+        '    public String getName() {\n        return "x";\n    }\n}\n'
     )
     jhits = {h[2] for h in _regex_outline_methods(str(ja), "java", set())}
     assert "getName" in jhits, (
@@ -432,7 +432,7 @@ def test_body_not_truncated_by_brace_in_comment(tmp_path) -> None:  # type: igno
     ja = tmp_path / "Service.java"
     ja.write_text(
         "public class Service {\n"
-        '    public String greet() {\n'
+        "    public String greet() {\n"
         "        // close } in comment\n"
         '        return "x {y} z";\n'
         "    }\n"
@@ -464,7 +464,7 @@ def test_body_not_truncated_by_brace_in_string(tmp_path) -> None:  # type: ignor
     ts = tmp_path / "svc.ts"
     ts.write_text(
         "export class Svc {\n"
-        '  public build(): string {\n'
+        "  public build(): string {\n"
         "    const map = { a: 1 };\n"
         "    return `${map.a} of {total}`;\n"
         "  }\n"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import sys
 from pathlib import Path
 from typing import Iterator
@@ -18,6 +19,14 @@ from codeq.shared.locators import _locate_line, _regex_outline_methods
 from codeq.shared.lombok import detect_lombok_members
 
 
+def _is_excluded_dir(name: str) -> bool:
+    """Match NAME against VENDOR_EXCLUDES with fnmatch (so wildcard entries
+    like `.aider*` cover `.aider`, `.aider.chat.history`, `.aider.tags.cache`).
+    Mirrors `codeq.shared.search._excluded_dir` so the rg/ctags/Python-walker
+    /find-fallback sweep paths all agree on what counts as a vendor dir."""
+    return any(fnmatch.fnmatch(name, ex) for ex in VENDOR_EXCLUDES)
+
+
 def _walk_source_files(
     root: Path,
     suffixes: set[str] | frozenset[str],
@@ -25,7 +34,15 @@ def _walk_source_files(
 ) -> Iterator[Path]:
     """Yield files under `root` whose suffix is in `suffixes`, pruning
     vendor/cache dirs and capping at `cap` files. Shared by the brace-lang
-    and Lombok sweeps in `cmd_find` to avoid duplicating the walk logic."""
+    and Lombok sweeps in `cmd_find` to avoid duplicating the walk logic.
+
+    Bug history (fixed 2026-07-04): the dir filter used to be
+    ``p in VENDOR_EXCLUDES`` (exact equality), which silently leaked
+    wildcard-segment vendor dirs (e.g. `.aider.chat.history`,
+    `.aider.tags.cache`) because the list entry is the wildcard pattern
+    `.aider*` rather than the literal directory name. Switched to
+    ``fnmatch.fnmatch`` to match every other consumer of VENDOR_EXCLUDES
+    (rg globs, ctags --exclude, pure-Python walker)."""
     root_parts = set(root.resolve().parts)
     count = 0
     for path in root.rglob("*"):
@@ -39,7 +56,7 @@ def _walk_source_files(
         if not path.is_file() or path.suffix not in suffixes:
             continue
         rel_parts = set(path.resolve().parts) - root_parts
-        if any(p in VENDOR_EXCLUDES for p in rel_parts):
+        if any(_is_excluded_dir(p) for p in rel_parts):
             continue
         if any(path.match(g) for g in CACHE_GLOBS):
             continue
