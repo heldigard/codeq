@@ -7,7 +7,7 @@ from pathlib import Path
 
 from codeq.shared.config import _RESERVED_KEYWORDS
 from codeq.shared.core import die, lang_of
-from codeq.features.dependencies.command import get_deps
+from codeq.features.dependencies.command import get_deps, get_rdeps
 from codeq.shared.extraction import _raw_body, _sig_from_raw
 from codeq.shared.locators import _locate_line
 from codeq.shared.llm import (
@@ -115,15 +115,27 @@ def _no_body_error(file: str, name: str, lang: str, action: str) -> int:
     return 1
 
 
+def _print_file_importers(file: str, path: str, lang: str) -> None:
+    """Print bounded reverse deps so context includes edit blast radius."""
+    _print_section(f"Importers of {file} (rdeps, edit blast radius)")
+    rows = get_rdeps(file, path, lang, limit=25)
+    if rows:
+        for importer, ln, text in rows:
+            print(f"{importer}:{ln}:{text}")
+    else:
+        print(f"(no project files import {file} under {path})")
+
+
 def cmd_context(args: argparse.Namespace) -> int:
     """Bundled context for code editing: summary + signature + body + call
-    sites (refs) + file-level imports. ONE call replaces the typical
-    LLM exploration of `find + body + refs + deps` (3-5 tool calls + a
-    re-read of the body). Ollama enriches ONLY with a tagged 1-line
-    summary; the rest is structural data.
+    sites (refs) + file-level imports + bounded file importers. ONE call
+    replaces the typical LLM exploration of `find + body + refs + deps + rdeps`
+    (4-6 tool calls + a re-read of the body). Ollama enriches ONLY with a
+    tagged 1-line summary; the rest is structural data.
 
     Use this when the agent is ABOUT TO EDIT a function/method and wants
-    to know: what it does, who calls it, what it imports.
+    to know: what it does, who calls it, what it imports, and which files
+    import the edited module.
     """
     if not Path(args.file).is_file():
         die(f"no such file: {args.file}")
@@ -155,6 +167,7 @@ def cmd_context(args: argparse.Namespace) -> int:
             print(f"{ln:>5}  {kind:<6}  {mod}")
     else:
         print(f"(no imports found in {args.file})")
+    _print_file_importers(args.file, args.path, lang)
     return 0
 
 

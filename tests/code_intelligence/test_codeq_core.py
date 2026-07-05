@@ -126,6 +126,55 @@ def test_codeq_rdeps(fixture_dir: Path) -> None:
     assert "rdeps-consumer.ts" in result.stdout, (
         f"rdeps TS missed consumer: {result.stdout}"
     )
+    # TS files named `mod.ts` are direct modules too (`./mod`), not only
+    # package-entry files imported by their parent directory.
+    (fixture_dir / "rdeps-mod-consumer.ts").write_text(
+        "import { value } from './mod';\nexport const y = value;\n"
+    )
+    (fixture_dir / "mod.ts").write_text("export const value = 1;\n")
+    result = run(
+        ["codeq", "rdeps", str(fixture_dir / "mod.ts"), "-p", str(fixture_dir)]
+    )
+    assert "rdeps-mod-consumer.ts" in result.stdout, (
+        f"rdeps TS missed direct ./mod importer: {result.stdout}"
+    )
+    # Python package files often have generic names like `command.py`. rdeps
+    # must search the importable module path, not just the stem `command`,
+    # otherwise every sibling `*.command` import is reported as a false importer.
+    (fixture_dir / "pkg" / "a").mkdir(parents=True)
+    (fixture_dir / "pkg" / "b").mkdir(parents=True)
+    for init in (
+        fixture_dir / "pkg" / "__init__.py",
+        fixture_dir / "pkg" / "a" / "__init__.py",
+        fixture_dir / "pkg" / "b" / "__init__.py",
+    ):
+        init.write_text("")
+    (fixture_dir / "pkg" / "a" / "command.py").write_text(
+        "def target() -> int:\n    return 1\n"
+    )
+    (fixture_dir / "pkg" / "b" / "command.py").write_text(
+        "def other() -> int:\n    return 2\n"
+    )
+    (fixture_dir / "pkg_consumer.py").write_text(
+        "from pkg.a.command import target\n"
+        "from pkg.b.command import other\n"
+        "value = target() + other()\n"
+    )
+    result = run(
+        [
+            "codeq",
+            "rdeps",
+            str(fixture_dir / "pkg" / "a" / "command.py"),
+            "-p",
+            str(fixture_dir),
+        ]
+    )
+    assert "pkg.a.command" in result.stdout, (
+        f"rdeps Python missed precise package importer: {result.stdout}"
+    )
+    assert "pkg.b.command" not in result.stdout, (
+        f"rdeps Python used noisy stem key for command.py: {result.stdout}"
+    )
     # never-imported file → exit 1
     result = run(
         ["codeq", "rdeps", str(fixture_dir / "debug.py"), "-p", str(fixture_dir)],

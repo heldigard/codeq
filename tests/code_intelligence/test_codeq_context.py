@@ -34,6 +34,9 @@ export class X {
         (d / "caller.ts").write_text(
             "import { X } from './mod';\nexport function run(x: X, s: string) {\n  return x.doWork(s);\n}\n"
         )
+        (d / "host.ts").write_text(
+            "import { X } from './mod';\nexport const componentType = X;\n"
+        )
 
         # `summary --no-llm` → stdout empty (the LLM isn't needed for the body),
         # stderr has the disabled-prefix note.
@@ -90,7 +93,9 @@ export class X {
             "=== Body ===",
             "=== Callers of 'doWork'",
             "=== Imports of ",
+            "=== Importers of ",
             "caller.ts",  # caller is referenced under refs
+            "host.ts",  # importer is referenced under rdeps, even without method call
             "[summary skipped",  # the lighter no-llm note for context/relations
         ):
             assert section in r.stdout, (

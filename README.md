@@ -22,7 +22,7 @@ codeq relations NAME FILE -p . --no-llm
 codeq doctor                # check required/optional external binaries
 ```
 
-The goal is to give an agent the exact symbol body, signature, references, imports, or repo map it needs without dumping whole files into context.
+The goal is to give an agent the exact symbol body, signature, references, imports, reverse importers, or repo map it needs without dumping whole files into context.
 
 ## Requirements
 

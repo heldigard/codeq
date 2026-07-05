@@ -34,7 +34,7 @@ examples:
   codeq refs Foo -p src/          call sites (definition filtered)
   codeq deps src/app.py           imports of a file
   codeq rdeps src/foo.py -p src/  which files import foo.py
-  codeq context Foo src/app.py -p src/  bundled editing context
+  codeq context Foo src/app.py -p src/  bundled editing context + file importers
   codeq map -p . --top 10         repo orientation map
   codeq doctor                    check external binaries
 """,
@@ -183,7 +183,7 @@ examples:
 
     cx = sub.add_parser(
         "context",
-        help="bundled context for editing: summary + signature + body + callers + file imports (one call replaces find+body+refs+deps)",
+        help="bundled context for editing: summary + signature + body + callers + file imports + importers (one call replaces find+body+refs+deps+rdeps)",
     )
     cx.add_argument("name", help="symbol name to orient on")
     cx.add_argument("file", help="file containing the symbol")

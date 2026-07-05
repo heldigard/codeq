@@ -68,14 +68,73 @@ def _module_keys(file: str) -> list[str]:
     p = Path(file)
     stem = p.stem
     keys: list[str] = []
-    if stem in ("__init__", "index", "mod") and p.parent.name:
-        # package entry files are imported by their DIRECTORY name
+    if stem == "__init__" and p.parent.name:
+        # Python package entry files are imported by their DIRECTORY name.
         keys.append(p.parent.name)
+    elif stem in ("index", "mod") and p.parent.name:
+        # Directory entry files are commonly imported by the directory name
+        # (`./pkg` -> `pkg/index.ts`, Rust `mod.rs`), but `mod.ts` and
+        # `index.ts` can also be imported directly as `./mod` / `./index`.
+        keys.extend([p.parent.name, stem])
     else:
         keys.append(stem)
         if p.suffix == ".go" and p.parent.name:
             keys.append(p.parent.name)  # go imports the package dir, not the file
     return keys
+
+
+def _dedup_keys(keys: list[str]) -> list[str]:
+    """Deduplicate module keys while preserving search order."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for key in keys:
+        if key and key not in seen:
+            seen.add(key)
+            out.append(key)
+    return out
+
+
+def _python_package_module(file: str) -> str | None:
+    """Importable module path for FILE when it lives under Python packages."""
+    p = Path(file).resolve()
+    parts = [p.stem] if p.stem != "__init__" else []
+    cur = p.parent
+    while (cur / "__init__.py").is_file():
+        parts.append(cur.name)
+        cur = cur.parent
+    return ".".join(reversed(parts)) if parts else None
+
+
+def _python_src_layout_module(file: str, path: str) -> str | None:
+    """Best-effort src-layout module path when package __init__ files are absent."""
+    try:
+        rel = Path(file).resolve().relative_to(Path(path).resolve())
+    except ValueError:
+        return None
+    parts = list(rel.with_suffix("").parts)
+    if parts and parts[0] == "src":
+        parts = parts[1:]
+    if parts and parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ".".join(parts) if parts else None
+
+
+def _rdep_module_keys(file: str, path: str, lang: str) -> list[str]:
+    """Candidate module keys for rdeps.
+
+    Python package files often share generic names (`command.py`, `models.py`).
+    For those, a stem-only search is noisy, so prefer precise importable module
+    paths when we can infer them. Script-like files keep the legacy stem key.
+    """
+    if lang != "python":
+        return _module_keys(file)
+    precise = _dedup_keys(
+        [
+            _python_package_module(file) or "",
+            _python_src_layout_module(file, path) or "",
+        ]
+    )
+    return precise or _module_keys(file)
 
 
 def _resolves_to(path: str, target: Path) -> bool:
@@ -154,7 +213,7 @@ def get_rdeps(
             resolved_lang = lang_of(file, None)
         except SystemExit:
             return []
-    keys = _module_keys(file)
+    keys = _rdep_module_keys(file, path, resolved_lang)
     includes = _INCLUDES_BY_LANG.get(resolved_lang, [])
     target = f.resolve()
     seen: set[tuple[str, str]] = set()
@@ -195,7 +254,7 @@ def cmd_rdeps(args: argparse.Namespace) -> int:
     limit = getattr(args, "limit", 200) or 0
     rows = get_rdeps(args.file, args.path, lang, limit=limit)
     if not rows:
-        keys = _module_keys(args.file)
+        keys = _rdep_module_keys(args.file, args.path, lang)
         print(
             f"no project file imports '{'/'.join(keys)}' under {args.path}",
             file=sys.stderr,
@@ -224,6 +283,20 @@ def _ts_pattern_matches(text: str, lang: str, key: str) -> bool:
     return False
 
 
+def _py_module_matches(candidate: str, key: str) -> bool:
+    """True when Python import CANDIDATE names KEY.
+
+    Dotted keys are precise (`pkg.a.command`). Stem/package keys keep the
+    legacy segment fallback used for script files and package entry modules.
+    """
+    if candidate == key or candidate.startswith(f"{key}."):
+        return True
+    if "." in key:
+        return False
+    parts = candidate.split(".")
+    return parts[-1] == key or key in parts
+
+
 def _is_import_of(text: str, key: str, lang: str) -> bool:
     """True when TEXT is an import statement whose module path resolves to KEY."""
     key_esc = re.escape(key)
@@ -233,9 +306,7 @@ def _is_import_of(text: str, key: str, lang: str) -> bool:
             return False
         mods = m.group(1) or m.group(2) or ""
         candidates = [p for p in re.split(r"[,\s]+", mods) if p]
-        return any(
-            part.split(".")[-1] == key or key in part.split(".") for part in candidates
-        )
+        return any(_py_module_matches(part, key) for part in candidates)
     if lang in ("javascript", "typescript"):
         if _ts_pattern_matches(text, lang, key):
             return True
