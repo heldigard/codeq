@@ -136,7 +136,7 @@ VENDOR_EXCLUDES = [
     ".serverless", ".vercel", "tmp", "temp",
     # Agent harness / memory noise (project facts, transcripts, and backups are
     # not source code and should not steer symbol lookup unless grepped directly).
-    ".memory-bank", "memory-bank", "file-history",
+    ".memory-bank", "memory-bank", ".claude", ".codex", "file-history",
     # JVM
     ".gradle", ".mvn",
     # Rust / Go
