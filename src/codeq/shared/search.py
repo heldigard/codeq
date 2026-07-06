@@ -95,9 +95,9 @@ def _rg_search(
         cmd += ["-g", glob]
     cmd += ["--", pattern, path]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-    except (OSError, FileNotFoundError):
-        return None
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    except (OSError, FileNotFoundError, subprocess.TimeoutExpired):
+        return None  # rg hung/missing → fall back to the pure-Python walker
     if proc.returncode not in (0, 1):  # 0 = matches, 1 = no matches
         return None
     return proc.stdout.splitlines()

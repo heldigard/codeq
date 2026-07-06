@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +13,11 @@ from codeq.shared.config import (
     VENDOR_EXCLUDES,
 )
 
+# Wall-clock cap for any external binary (ctags / ast-grep) invoked via run().
+# 60s is generous for a single-file extract; a hang means a corrupt file or a
+# broken binary, not a slow one. Override via env for huge monorepos.
+_BIN_TIMEOUT: float = float(os.environ.get("CODEQ_BIN_TIMEOUT", "60"))
+
 
 def die(msg: str, code: int = 2) -> NoReturn:
     print(f"codeq: {msg}", file=sys.stderr)
@@ -19,7 +25,18 @@ def die(msg: str, code: int = 2) -> NoReturn:
 
 
 def run(cmd: list[str]) -> tuple[int, str, str]:
-    p = subprocess.run(cmd, capture_output=True, text=True)
+    """Run an external binary with a hard timeout. A timed-out tool is a hard
+    failure (no fallback for ctags/ast-grep) — surface it as `die` rather than
+    hanging the agent loop indefinitely."""
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=_BIN_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        tool = cmd[0] if cmd else "command"
+        die(
+            f"{tool} timed out after {int(_BIN_TIMEOUT)}s "
+            f"(set CODEQ_BIN_TIMEOUT to raise it)",
+            code=2,
+        )
     return p.returncode, p.stdout, p.stderr
 
 
