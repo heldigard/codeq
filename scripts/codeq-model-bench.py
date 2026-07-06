@@ -19,6 +19,7 @@ Usage:
 
 Exit 0 = ran (some models may have errored, see output); 1 = daemon down.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -40,11 +41,15 @@ from _bench_samples import SAMPLES
 
 # Default candidate set — the models worth comparing for the summary task.
 # (Embedding models excluded — they can't generate.) Override with -m.
+# Aligned with ~/ollama-bench/RANKING.md round-5 (2026-07-05): SetneufPT is
+# the current codeq_sum #1; batiai/gemma4-e4b:q4 is the PRIOR #1 kept as a
+# regression baseline (it collapsed in the r5 tie-break). MobiusDevelopment/
+# gemma-4-12B-it-qat was removed — broken under Ollama 0.23.2+ (superseded).
 DEFAULT_MODELS = [
+    "SetneufPT/Qwopus3.5-4B-Coder-MTP_Q4_64k_8GB-GPU:latest",  # round-5 codeq_sum #1
+    "batiai/gemma4-e4b:q4",  # prior codeq_sum #1 — regression baseline
     "qwen3.5:4b",  # ollama_client global default / universal fallback
-    "MobiusDevelopment/gemma-4-12B-it-qat-q4_0-gguf:latest",  # 2026-06-28 winner
     "fredrezones55/Qwen3.5-Uncensored-HauhauCS-Aggressive:4b",
-    "SetneufPT/Qwopus3.5-4B-Coder-MTP_Q4_64k_8GB-GPU:latest",
     "zfujicute/OmniCoder-Qwen3.5-9B-Claude-4.6-Opus-Uncensored-v2-GGUF:latest",
 ]
 
@@ -68,8 +73,14 @@ def _word_count(s: str) -> int:
 
 
 _LEAK_SIGNALS = (
-    "protected", "private", "Promise<void>", "{\n", "```", "Thinking:",
-    "Thinking Process", "Analyze the Request",
+    "protected",
+    "private",
+    "Promise<void>",
+    "{\n",
+    "```",
+    "Thinking:",
+    "Thinking Process",
+    "Analyze the Request",
 )
 
 
@@ -83,12 +94,21 @@ def run_one(model: str, name: str, body: str, *, use_cache: bool) -> dict:
     t0 = time.monotonic()
     try:
         raw = ollama_client.generate(
-            prompt, model=model, temperature=0.2, num_ctx=8192,
-            timeout=45, cache=use_cache,
+            prompt,
+            model=model,
+            temperature=0.2,
+            num_ctx=8192,
+            timeout=45,
+            cache=use_cache,
         )
     except Exception as exc:
         elapsed = round(time.monotonic() - t0, 1)
-        return {"model": model, "sample": name, "error": f"{type(exc).__name__}: {exc}", "seconds": elapsed}
+        return {
+            "model": model,
+            "sample": name,
+            "error": f"{type(exc).__name__}: {exc}",
+            "seconds": elapsed,
+        }
     dt = time.monotonic() - t0
     text = (raw or "").strip().strip('"').strip("'")
     return {
@@ -107,15 +127,21 @@ def _build_parser() -> argparse.ArgumentParser:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument(
-        "-m", "--model", action="append", dest="models",
+        "-m",
+        "--model",
+        action="append",
+        dest="models",
         help="candidate model (repeatable; default: DEFAULT_MODELS)",
     )
     ap.add_argument(
-        "-o", "--output", default=None,
+        "-o",
+        "--output",
+        default=None,
         help="write a Markdown snapshot to this path (in addition to stdout)",
     )
     ap.add_argument(
-        "--no-cache", action="store_true",
+        "--no-cache",
+        action="store_true",
         help="force cold calls (default: use ollama_client cache for stable input)",
     )
     ap.add_argument("--json", action="store_true", help="emit JSON instead of human-readable")
@@ -172,8 +198,10 @@ def _results_for_sample(results: list[dict], sample: str) -> list[dict]:
 
 
 def _print_human(results: list[dict], models: list[str]) -> None:
-    print(f"# codeq summary-model benchmark | {len(models)} models x "
-          f"{len({r['sample'] for r in results})} samples\n")
+    print(
+        f"# codeq summary-model benchmark | {len(models)} models x "
+        f"{len({r['sample'] for r in results})} samples\n"
+    )
     for sample in [s[0] for s in SAMPLES]:
         print(f"\n{'=' * 78}\nSAMPLE: {sample}\n{'=' * 78}")
         for r in _results_for_sample(results, sample):
