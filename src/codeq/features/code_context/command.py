@@ -4,6 +4,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 from codeq.shared.config import _RESERVED_KEYWORDS
 from codeq.shared.core import die, lang_of
@@ -124,6 +125,116 @@ def _print_file_importers(file: str, path: str, lang: str) -> None:
             print(f"{importer}:{ln}:{text}")
     else:
         print(f"(no project files import {file} under {path})")
+
+
+def _summary_payload(
+    file: str,
+    name: str,
+    raw: str,
+    *,
+    no_llm: bool,
+) -> dict[str, Any]:
+    """Return optional local-LLM summary metadata for structured output."""
+    if no_llm:
+        return {"text": None, "status": "skipped", "reason": "--no-llm"}
+    summary, reason, cold = _summarize_code(file, name, raw, no_llm=False)
+    if summary:
+        return {
+            "text": summary,
+            "status": "ok",
+            "model": reason or "local-llm",
+            "latency_seconds": cold,
+        }
+    return {"text": None, "status": "unavailable", "reason": reason or "unknown"}
+
+
+def build_context_payload(
+    name: str,
+    file: str,
+    path: str,
+    lang_override: str | None = None,
+    *,
+    no_llm: bool = False,
+    include_body: bool = True,
+    include_dependencies: bool = True,
+) -> tuple[dict[str, Any], int]:
+    """Build the same edit-context facts as `cmd_context`, but structured.
+
+    This is the machine-facing API behind `codeq --json context`: one bounded
+    hand call gives the controller exact structural facts without asking it to
+    parse Markdown sections.
+    """
+    if not Path(file).is_file():
+        return {"command": "context", "exit_code": 1, "error": f"no such file: {file}"}, 1
+    lang = lang_of(file, lang_override)
+    raw = _raw_body(file, name, lang)
+    if raw is None:
+        return {
+            "command": "context",
+            "name": name,
+            "file": file,
+            "path": path,
+            "lang": lang,
+            "exit_code": 1,
+            "error": f"no exact body extractor to build context for {lang}",
+            "line": _locate_line(file, name),
+        }, 1
+    refs = get_refs(name, path, lang)
+    payload: dict[str, Any] = {
+        "command": "context",
+        "name": name,
+        "file": file,
+        "path": path,
+        "lang": lang,
+        "signature": _sig_from_raw(raw, lang),
+        "summary": _summary_payload(file, name, raw, no_llm=no_llm),
+        "refs": refs,
+        "refs_count": len(refs),
+    }
+    if include_dependencies:
+        deps = get_deps(file, lang)
+        importers = get_rdeps(file, path, lang, limit=25)
+        payload["imports"] = [
+            {"line": ln, "kind": kind, "module": mod} for ln, kind, mod in deps
+        ]
+        payload["imports_count"] = len(deps)
+        payload["importers"] = [
+            {"file": importer, "line": ln, "text": text}
+            for importer, ln, text in importers
+        ]
+        payload["importers_count"] = len(importers)
+    if include_body:
+        payload["body"] = raw
+        payload["body_lines"] = len(raw.splitlines())
+    return payload, 0
+
+
+def build_relations_payload(
+    name: str,
+    file: str,
+    path: str,
+    lang_override: str | None = None,
+    *,
+    no_llm: bool = False,
+) -> tuple[dict[str, Any], int]:
+    """Build compact call-orientation facts for `codeq --json relations`."""
+    payload, exit_code = build_context_payload(
+        name,
+        file,
+        path,
+        lang_override,
+        no_llm=no_llm,
+        include_body=False,
+        include_dependencies=False,
+    )
+    payload["command"] = "relations"
+    if exit_code != 0:
+        return payload, exit_code
+    raw = _raw_body(file, name, payload["lang"])
+    calls = _body_call_hints(raw or "", exclude_name=name)
+    payload["internal_call_hints"] = calls
+    payload["internal_call_hints_count"] = len(calls)
+    return payload, 0
 
 
 def cmd_context(args: argparse.Namespace) -> int:

@@ -17,7 +17,9 @@ import pytest
 
 from codeq.shared.tree_sitter_extract import ts_available, ts_body
 
-pytestmark = pytest.mark.skipif(not ts_available(), reason="tree-sitter not installed")
+pytestmark = pytest.mark.skipif(  # noqa: F841 - consumed by pytest collection
+    not ts_available(), reason="tree-sitter not installed"
+)
 
 
 def _write(root: str, name: str, body: str) -> Path:

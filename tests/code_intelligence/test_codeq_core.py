@@ -37,6 +37,23 @@ def test_codeq(fixture_dir: Path) -> None:
     assert result.returncode == 0, f"codeq check failed: {result.stderr}"
 
 
+def test_codeq_tags_default_output_scopes_to_search_root(fixture_dir: Path) -> None:
+    """`codeq tags -p /other/repo` should write `/other/repo/.tags`, not
+    `.tags` in the caller's cwd. Multi-repo agents often index sibling projects
+    from one controller cwd; cwd-scoped output makes later `grep .tags` inspect
+    the wrong repository."""
+    with tempfile.TemporaryDirectory() as tmp:
+        cwd = Path(tmp)
+        result = run(["codeq", "tags", "-p", str(fixture_dir)], cwd=cwd)
+
+        assert result.returncode == 0, result.stderr
+        assert (fixture_dir / ".tags").is_file(), result.stdout
+        assert not (cwd / ".tags").exists(), (
+            "default tag output leaked into the caller cwd instead of the search root"
+        )
+        assert str(fixture_dir / ".tags") in result.stdout
+
+
 def test_codeq_check_java_probe() -> None:
     """`codeq check -l java` must NOT die with 'no probe for lang'. Java is
     already supported by `codeq rename` and by body extraction (BODY_PATTERNS),
@@ -400,6 +417,47 @@ def test_codeq_json_output(fixture_dir: Path) -> None:
     assert data["command"] == "rdeps"
     assert data["count"] > 0
 
+    # context: structured editing bundle
+    result = run(
+        [
+            "codeq",
+            "--json",
+            "context",
+            "calculate",
+            str(file_path),
+            "-p",
+            str(fixture_dir),
+            "--no-llm",
+        ]
+    )
+    data = json.loads(result.stdout)
+    assert data["command"] == "context"
+    assert data["signature"].startswith("def calculate")
+    assert "def calculate" in data["body"]
+    assert data["refs_count"] > 0
+    assert any(imp["module"] == "json" for imp in data["imports"])
+    assert data["summary"]["status"] == "skipped"
+
+    # relations: structured, compact orientation bundle without the body/deps.
+    result = run(
+        [
+            "codeq",
+            "--json",
+            "relations",
+            "calculate",
+            str(file_path),
+            "-p",
+            str(fixture_dir),
+            "--no-llm",
+        ]
+    )
+    data = json.loads(result.stdout)
+    assert data["command"] == "relations"
+    assert data["signature"].startswith("def calculate")
+    assert "body" not in data
+    assert "imports" not in data
+    assert data["internal_call_hints"] == []
+
     # body: text envelope
     result = run(["codeq", "--json", "body", "calculate", str(file_path)])
     data = json.loads(result.stdout)
@@ -415,6 +473,26 @@ def test_codeq_json_output(fixture_dir: Path) -> None:
     data = json.loads(result.stdout)
     assert data["exit_code"] == 1
     assert "no def/class" in data["error"]
+
+
+def test_codeq_capabilities_contract() -> None:
+    """Routers/workers need stable risk hints before deciding which hand to use."""
+    import json
+
+    result = run(["codeq", "capabilities"])
+    assert result.returncode == 0, result.stderr
+    assert "rename" in result.stdout
+    assert "destructive" in result.stdout
+
+    result = run(["codeq", "--json", "capabilities"])
+    data = json.loads(result.stdout)
+    by_name = {item["name"]: item for item in data["capabilities"]}
+
+    assert data["schema_version"] == 1
+    assert by_name["context"]["structured_json"] is True
+    assert by_name["relations"]["read_only"] is True
+    assert by_name["rename"]["destructive"] is True
+    assert by_name["doctor"]["open_world"] is True
 
 
 def test_codeq_limit_flag(fixture_dir: Path) -> None:

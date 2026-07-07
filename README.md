@@ -14,15 +14,29 @@ codeq refs NAME -p .
 codeq deps FILE
 codeq rdeps FILE -p .
 codeq map -p . --save
-codeq tags -p . -o .tags
+codeq tags -p .
 codeq check 'print($X)' -l python
 codeq summary NAME FILE --no-llm
 codeq context NAME FILE -p . --no-llm
 codeq relations NAME FILE -p . --no-llm
+codeq --json context NAME FILE -p . --no-llm
+codeq --json relations NAME FILE -p . --no-llm
+codeq capabilities
+codeq --json capabilities
 codeq doctor                # check required/optional external binaries
 ```
 
 The goal is to give an agent the exact symbol body, signature, references, imports, reverse importers, or repo map it needs without dumping whole files into context.
+
+Use Markdown output for direct controller reading. Use `--json context` and
+`--json relations` when another worker, script, or MCP bridge consumes the
+result; those commands expose typed fields instead of forcing downstream code
+to parse Markdown sections.
+
+`capabilities` is a local tool-card manifest for routers. It marks each command
+with read-only, destructive, idempotent, open-world, and structured-JSON hints
+so a controller can decide when to call a hand directly, ask for approval, or
+prefer a cheaper structured path.
 
 ## Requirements
 

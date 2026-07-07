@@ -13,7 +13,7 @@ def cmd_tags(args: argparse.Namespace) -> int:
     raw `ctags -R --fields=+nKz -f .tags .` documented in older rules, which would
     otherwise index node_modules/__pycache__/dist and bloat the tag file with vendor
     symbols. Shares the SAME exclude list as find/refs (single source of truth)."""
-    out_file = args.output
+    out_file = args.output or str(Path(args.path) / ".tags")
     cmd = [CTAGS, "-R", "--fields=+nKz", "-f", out_file]
     cmd += ctags_exclude_args()
     cmd += [args.path]

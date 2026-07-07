@@ -81,11 +81,47 @@ def _rdeps_json(args: argparse.Namespace) -> int:
     )
 
 
+def _context_json(args: argparse.Namespace) -> int:
+    from codeq.features.code_context.command import build_context_payload
+
+    payload, exit_code = build_context_payload(
+        args.name,
+        args.file,
+        args.path,
+        args.lang,
+        no_llm=getattr(args, "no_llm", False),
+    )
+    return emit_json(payload, exit_code)
+
+
+def _relations_json(args: argparse.Namespace) -> int:
+    from codeq.features.code_context.command import build_relations_payload
+
+    payload, exit_code = build_relations_payload(
+        args.name,
+        args.file,
+        args.path,
+        args.lang,
+        no_llm=getattr(args, "no_llm", False),
+    )
+    return emit_json(payload, exit_code)
+
+
+def _capabilities_json(args: argparse.Namespace) -> int:
+    del args
+    from codeq.features.capabilities.command import capabilities_payload
+
+    return emit_json(capabilities_payload(), 0)
+
+
 # Commands with structured JSON support via pure functions.
 _STRUCTURED_HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "refs": _refs_json,
     "deps": _deps_json,
     "rdeps": _rdeps_json,
+    "context": _context_json,
+    "relations": _relations_json,
+    "capabilities": _capabilities_json,
 }
 
 

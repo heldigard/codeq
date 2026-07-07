@@ -5,6 +5,7 @@ import argparse
 from codeq import __version__
 from codeq.features.symbol_body.command import cmd_body, cmd_class, cmd_sig
 from codeq.features.code_context.command import cmd_context, cmd_relations, cmd_summary
+from codeq.features.capabilities.command import cmd_capabilities
 from codeq.features.dependencies.command import cmd_deps, cmd_rdeps
 from codeq.features.doctor.command import cmd_doctor
 from codeq.features.repo_map.command import cmd_map
@@ -35,6 +36,7 @@ examples:
   codeq deps src/app.py           imports of a file
   codeq rdeps src/foo.py -p src/  which files import foo.py
   codeq context Foo src/app.py -p src/  bundled editing context + file importers
+  codeq capabilities             tool-card style capability/risk hints
   codeq map -p . --top 10         repo orientation map
   codeq doctor                    check external binaries
 """,
@@ -93,7 +95,12 @@ examples:
         help="project .tags index with vendor dirs excluded (replaces raw ctags -R)",
     )
     tg.add_argument("-p", "--path", default=".", help="search root (default: cwd)")
-    tg.add_argument("-o", "--output", default=".tags", help="output tags file (default: .tags)")
+    tg.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        help="output tags file (default: <search root>/.tags)",
+    )
     tg.set_defaults(func=cmd_tags)
 
     c = sub.add_parser("check", help="validate an ast-grep pattern (single-node) before running")
@@ -219,6 +226,12 @@ examples:
         help="report match count without writing",
     )
     rn.set_defaults(func=cmd_rename)
+
+    cap = sub.add_parser(
+        "capabilities",
+        help="tool-card style capability/risk hints for routers and workers",
+    )
+    cap.set_defaults(func=cmd_capabilities)
 
     doc = sub.add_parser(
         "doctor",
