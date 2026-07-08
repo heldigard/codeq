@@ -34,17 +34,13 @@ _OLLAMA_DISABLED_PREFIX = (
 )
 
 # Model used for the `summary`/`context`/`relations`/`--summary` paths.
-# Default is the codeq_sum winner of the 2026-07-05 round-5 re-bench on Ollama
-# 0.31.1 (combined-rank of deep + tie-break): SetneufPT/Qwopus3.5-4B-Coder-MTP
-# took #1 (combined 2.0; deep #1, tb #3) after batiai/gemma4-e4b:q4 collapsed in
-# the r5 hard-prompt tie-break (9.00, rank #11 — likely Ollama 0.31.x sampling
-# drift on the summary prompt). SetneufPT is also smart_trim #1, so this aligns
-# two roles on one reliable model. Override with CODEQ_SUMMARY_MODEL (e.g. set
-# to "qwen3.5:4b" on a VRAM-tight host, or any other gen model). See
-# ~/ollama-bench (RANKING.md) to re-run the comparison.
+# Default is the codeq_sum winner of the 2026-07-08 canonical refactor re-bench:
+# jaahas/crow:9b scored 9.23 and separated from SetneufPT (9.15) after the new
+# non-saturating summary metrics. Override with CODEQ_SUMMARY_MODEL on VRAM-tight
+# hosts or when testing another local model. See ~/ollama-bench/RANKING.md.
 _CODEQ_SUMMARY_MODEL = os.environ.get(
     "CODEQ_SUMMARY_MODEL",
-    "SetneufPT/Qwopus3.5-4B-Coder-MTP_Q4_64k_8GB-GPU:latest",
+    "jaahas/crow:9b",
 )
 
 
