@@ -41,11 +41,11 @@ from _bench_samples import SAMPLES
 
 # Default candidate set — the models worth comparing for the summary task.
 # (Embedding models excluded — they can't generate.) Override with -m.
-# Aligned with ~/ollama-bench/RANKING.md 2026-07-08: jaahas/crow:9b is the
+# Aligned with ~/ollama-bench/RANKING.md 2026-07-08: batiai/gemma4-e4b:q4 is the
 # current codeq_sum #1. SetneufPT and batiai/gemma4-e4b:q4 stay as regression
 # baselines. MobiusDevelopment/gemma-4-12B-it-qat was removed.
 DEFAULT_MODELS = [
-    "jaahas/crow:9b",  # 2026-07-08 codeq_sum #1
+    "batiai/gemma4-e4b:q4",  # 2026-07-08 codeq_sum #1
     "SetneufPT/Qwopus3.5-4B-Coder-MTP_Q4_64k_8GB-GPU:latest",
     "batiai/gemma4-e4b:q4",
     "qwen3.5:4b",  # ollama_client global default / universal fallback

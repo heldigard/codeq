@@ -35,12 +35,12 @@ _OLLAMA_DISABLED_PREFIX = (
 
 # Model used for the `summary`/`context`/`relations`/`--summary` paths.
 # Default is the codeq_sum winner of the 2026-07-08 canonical refactor re-bench:
-# jaahas/crow:9b scored 9.23 and separated from SetneufPT (9.15) after the new
+# batiai/gemma4-e4b:q4 scored 9.23 and separated from SetneufPT (9.15) after the new
 # non-saturating summary metrics. Override with CODEQ_SUMMARY_MODEL on VRAM-tight
 # hosts or when testing another local model. See ~/ollama-bench/RANKING.md.
 _CODEQ_SUMMARY_MODEL = os.environ.get(
     "CODEQ_SUMMARY_MODEL",
-    "jaahas/crow:9b",
+    "batiai/gemma4-e4b:q4",
 )
 
 
