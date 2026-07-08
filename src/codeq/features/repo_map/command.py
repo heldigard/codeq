@@ -173,7 +173,7 @@ def _save_map(root: Path, out_text: str) -> None:
     if not bank.is_dir():
         print(
             f"--save skipped: no .memory-bank/ under {root} "
-            "(init one with project-memory first)",
+            "(init one with agent-memory first)",
             file=sys.stderr,
         )
         return
