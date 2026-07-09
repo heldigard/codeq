@@ -16,6 +16,7 @@ codeq rdeps FILE -p .
 codeq map -p . --save
 codeq tags -p .
 codeq check 'print($X)' -l python
+codeq rename OLD NEW -p . -l python -n   # AST structural rename (dry-run; strings/comments/kwargs never touched)
 codeq summary NAME FILE --no-llm
 codeq context NAME FILE -p . --no-llm
 codeq relations NAME FILE -p . --no-llm
@@ -44,7 +45,7 @@ prefer a cheaper structured path.
 - `ctags` on `PATH` (Universal Ctags; required)
 - `ast-grep` on `PATH` (required)
 - Optional: `ripgrep` on `PATH` — speeds up `refs`/`rdeps`; a built-in pure-Python walker is used otherwise. codeq NEVER depends on the system `grep`, whose behavior varies across GNU/ugrep/busybox/BSD.
-- Optional: local Ollama plus `ollama_client.py` for `summary`, `context`, `relations`, and `--summary`
+- Optional: local Ollama plus `ollama_client.py` for `summary`, `context`, `relations`, and `--summary`. Default summary model is `batiai/gemma4-e4b:q4`; override with `CODEQ_SUMMARY_MODEL`.
 
 Run `codeq doctor` to check what is installed (`codeq doctor --install` installs missing binaries via cargo/npm/pipx where possible).
 
@@ -65,10 +66,13 @@ The project is organized around vertical slices: each command family owns its CL
 src/codeq/
 ├── cli.py
 ├── features/
+│   ├── capabilities/      # capabilities manifest for routers
 │   ├── code_context/      # summary, context, relations
 │   ├── dependencies/      # deps, rdeps
+│   ├── doctor/            # doctor (external-binary health check)
 │   ├── pattern_check/     # check
 │   ├── references/        # refs
+│   ├── rename/            # rename (AST structural rename via ast-grep)
 │   ├── repo_map/          # map
 │   ├── symbol_body/       # body, class, sig
 │   ├── symbol_search/     # find, outline
