@@ -34,10 +34,14 @@ _OLLAMA_DISABLED_PREFIX = (
 )
 
 # Model used for the `summary`/`context`/`relations`/`--summary` paths.
-# Default is the codeq_sum winner of the 2026-07-08 canonical refactor re-bench:
-# batiai/gemma4-e4b:q4 scored 9.23 and separated from SetneufPT (9.15) after the new
-# non-saturating summary metrics. Override with CODEQ_SUMMARY_MODEL on VRAM-tight
-# hosts or when testing another local model. See ~/ollama-bench/RANKING.md.
+# Confirmed PRIMARY by the 2026-07-09 semantic wiring bench (generate protocol):
+# batiai/gemma4-e4b:q4 = 9.18, separated from Qwopus3.5-4B = 8.99 (runner-up) and
+# jaahas/crow:9b = 8.87. Intentionally single-model: the summary is optional
+# enrichment, so on model/daemon failure codeq degrades to no-summary (the
+# `[ollama summary unavailable]` note) rather than retrying a runner-up — unlike
+# smart-trim, which wires a real secondary because compaction must stay fail-open.
+# Override with CODEQ_SUMMARY_MODEL on VRAM-tight hosts. Source of truth:
+# ~/ollama-bench/results_wiring_validation_20260709.md.
 _CODEQ_SUMMARY_MODEL = os.environ.get(
     "CODEQ_SUMMARY_MODEL",
     "batiai/gemma4-e4b:q4",
