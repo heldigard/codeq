@@ -182,3 +182,65 @@ def test_codeq_summary_and_context_live() -> None:
         assert "def greet" not in r.stdout, (
             f"live summary leaked the body: {r.stdout!r}"
         )
+
+
+def test_codeq_relations_no_llm_sections() -> None:
+    """`codeq relations` emits the four orientation sections — header,
+    Signature, Internal call hints (regex over the body), and External refs
+    (AST-exact for .py) — under `--no-llm`. Closes the coverage gap: relations
+    had zero direct tests (it was only mentioned in a sibling test's docstring)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp) / "proj"
+        d.mkdir()
+        # target() calls helper() and util() internally → call hints; has a
+        # return annotation → exercised by the Signature section.
+        (d / "mod.py").write_text(
+            "def helper(x: int) -> int:\n"
+            "    return x + 1\n"
+            "\n"
+            "def util(x: int) -> int:\n"
+            "    return x * 2\n"
+            "\n"
+            "def target(value: int) -> int:\n"
+            "    a = helper(value)\n"
+            "    b = util(a)\n"
+            "    return b\n"
+        )
+        # External caller so the AST-exact `refs` half has a hit to report.
+        (d / "caller.py").write_text(
+            "from mod import target\n\ndef run(n: int) -> int:\n    return target(n)\n"
+        )
+
+        r = subprocess.run(
+            [
+                "codeq",
+                "relations",
+                "target",
+                str(d / "mod.py"),
+                "--no-llm",
+                "-p",
+                str(d),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert r.returncode == 0, (
+            f"relations --no-llm should succeed: rc={r.returncode} stderr={r.stderr!r}"
+        )
+        out = r.stdout
+        assert "[codeq relations" in out, (
+            f"relations missing the provenance header: {out!r}"
+        )
+        assert "Signature" in out, f"relations missing Signature section: {out!r}"
+        # Both internal callees should surface as call hints (regex over body).
+        assert "helper()" in out, f"relations missing helper() call hint: {out!r}"
+        assert "util()" in out, f"relations missing util() call hint: {out!r}"
+        # The AST-exact refs half should find the caller.py reference.
+        assert "caller.py" in out, (
+            f"relations missing the external ref from caller.py: {out!r}"
+        )
+        # relations must NOT embed the full body (that's `context`'s job).
+        assert "return b" not in out, (
+            f"relations leaked the body (should be cheaper than context): {out!r}"
+        )
