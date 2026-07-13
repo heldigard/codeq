@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import tempfile
 from pathlib import Path
+from typing import Callable, Any
 
 from .fixtures import write_fixtures, write_java_fixtures, write_typescript_fixtures
 from .helpers import run
@@ -56,7 +57,7 @@ def main() -> int:
         write_java_fixtures(fixture_dir)
         write_typescript_fixtures(fixture_dir)
 
-        checks = [
+        checks: list[tuple[Callable[[], Any], str]] = [
             (lambda: test_codeq(fixture_dir), "  codeq (python): OK"),
             (lambda: test_codeq_java(fixture_dir), "  codeq (java): OK"),
             (lambda: test_codeq_class(fixture_dir), "  codeq (class): OK"),

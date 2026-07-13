@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
+from typing import Generator
 
 import pytest
 
@@ -9,7 +10,7 @@ from .fixtures import write_fixtures, write_java_fixtures, write_typescript_fixt
 
 
 @pytest.fixture
-def fixture_dir():
+def fixture_dir() -> Generator[Path, None, None]:
     with tempfile.TemporaryDirectory() as tmp:
         fixture = Path(tmp) / "project"
         fixture.mkdir()
