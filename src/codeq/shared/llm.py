@@ -36,18 +36,37 @@ _OLLAMA_DISABLED_PREFIX = (
 )
 
 # Model used for the `summary`/`context`/`relations`/`--summary` paths.
-# Confirmed PRIMARY by the 2026-07-09 semantic wiring bench (generate protocol):
-# batiai/gemma4-e4b:q4 = 9.18, separated from Qwopus3.5-4B = 8.99 (runner-up) and
-# jaahas/crow:9b = 8.87. Intentionally single-model: the summary is optional
+# Confirmed PRIMARY by the 2026-07-12 round-9 4-way bench (generate protocol):
+# Qwythos-9B = 9.40 (#1), batiai/gemma4-e4b:q4 = 9.19 (#2), Qwopus3.5-4B = 8.99.
+# Qwythos validated isolated 2026-07-13 (9.17) — its deep-multi-model -100 is a
+# bench artifact (identity loop under sustained load), not a regression;
+# production calls it solo. Intentionally single-model: the summary is optional
 # enrichment, so on model/daemon failure codeq degrades to no-summary (the
 # `[ollama summary unavailable]` note) rather than retrying a runner-up — unlike
 # smart-trim, which wires a real secondary because compaction must stay fail-open.
-# Override with CODEQ_SUMMARY_MODEL on VRAM-tight hosts. Source of truth:
-# ~/ollama-bench/results_wiring_validation_20260709.md.
+# Override CODEQ_SUMMARY_MODEL=batiai/gemma4-e4b:q4 on VRAM-tight hosts (Qwythos
+# is 6.8GB). Source of truth: ~/ollama-bench/RANKING.md ## codeq_sum.
 _CODEQ_SUMMARY_MODEL = os.environ.get(
     "CODEQ_SUMMARY_MODEL",
+    "hf.co/empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF:Q4_K_M",
+)
+# Fallback when the primary (6.8GB) can't load — VRAM-tight hosts or GPU
+# contention. batiai/gemma4-e4b:q4 is codeq_sum #2 (round-9, 9.19) at 5.3GB.
+_CODEQ_FALLBACK_MODEL = os.environ.get(
+    "CODEQ_FALLBACK_MODEL",
     "batiai/gemma4-e4b:q4",
 )
+
+
+def _safe_generate(client: Any, prompt: str, model: str) -> str | None:
+    """One generate attempt; returns the raw text or None on any failure
+    (transport/timeout/empty). Used so summarize can try primary -> fallback
+    without nested try/except inflating the nesting budget."""
+    try:
+        res = client.generate(prompt, model=model, temperature=0.2, num_ctx=8192, timeout=30)
+        return str(res) if res is not None else None
+    except Exception:
+        return None
 
 
 def _llm_status(no_llm: bool = False) -> tuple[bool, str, str]:
@@ -126,23 +145,21 @@ def _summarize_code(
         "One sentence description:"
     )
     t0 = _time.monotonic()
-    try:
-        summary = ollama_client.generate(
-            prompt,
-            model=model,
-            temperature=0.2,
-            num_ctx=8192,
-            timeout=30,
-        )
-    except Exception as exc:  # transport / timeout — never crash the caller
-        return (None, f"Ollama call failed: {type(exc).__name__}", 0.0)
+    source = model
+    summary = _safe_generate(ollama_client, prompt, model)
+    if not summary and _CODEQ_FALLBACK_MODEL and model != _CODEQ_FALLBACK_MODEL:
+        # Primary (Qwythos 6.8GB) failed/empty — common under VRAM contention or
+        # on VRAM-tight hosts. Try the lighter fallback so codeq keeps its
+        # summary enrichment instead of degrading to no-summary.
+        source = _CODEQ_FALLBACK_MODEL
+        summary = _safe_generate(ollama_client, prompt, _CODEQ_FALLBACK_MODEL)
     cold = _time.monotonic() - t0
     if not summary:
-        return (None, "model returned empty", cold)
+        return (None, "primary+fallback empty", cold)
     summary = summary.strip().strip('"').strip("'")
     if len(summary) > 400:  # the model sometimes runs on; truncate hard
         summary = summary[:400].rsplit(" ", 1)[0] + "..."
-    return (summary, model, cold)
+    return (summary, source, cold)
 
 
 def _maybe_emit_summary(file_path: str, name: str, body: str, *, no_llm: bool = False) -> None:
