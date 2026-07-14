@@ -64,10 +64,11 @@ def _walk_source_files(
         yield path
 
 
-def cmd_find(args: argparse.Namespace) -> int:
+def get_find_hits(name: str, path_str: str) -> list[tuple[str, int, str, str]]:
+    """Gathers symbol locations matching `name` under `path_str` using ctags, regex search fallback, and Lombok search."""
     cmd = [CTAGS, "-R", "--fields=+Kzn", "-f", "-"]
     cmd += ctags_exclude_args()
-    cmd += [args.path]
+    cmd += [path_str]
     rc, out, _ = run(cmd)
     if rc != 0:
         die("ctags failed (is universal-ctags installed?)", 2)
@@ -76,8 +77,8 @@ def cmd_find(args: argparse.Namespace) -> int:
         parsed = _parse_ctags_line(line)
         if not parsed:
             continue
-        name, file, kind, line_no = parsed
-        if name == args.name:
+        c_name, file, kind, line_no = parsed
+        if c_name == name:
             try:
                 ln = int(line_no)
             except ValueError:
@@ -86,22 +87,22 @@ def cmd_find(args: argparse.Namespace) -> int:
     if not hits:
         # ctags-wide sweep returned nothing. Fall back to per-file `_locate_line`
         # (which runs ctags -> regex fallback chain) on brace-lang source files.
-        root = Path(args.path)
+        root = Path(path_str)
         if root.is_dir():
             brace_exts = frozenset(
                 {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".java"}
             )
             try:
                 for path in _walk_source_files(root, brace_exts):
-                    located_line = _locate_line(str(path), args.name)
+                    located_line = _locate_line(str(path), name)
                     if located_line:
-                        hits.append((str(path), located_line, "method", args.name))
+                        hits.append((str(path), located_line, "method", name))
             except OSError:
                 pass  # unreadable path — silently skip; ctags output was the primary source
     # Lombok: check if the name matches a Lombok-generated method in Java files.
     # Runs regardless of ctags hits to find Lombok methods in all Java files.
     seen_files = {h[0] for h in hits}
-    root = Path(args.path)
+    root = Path(path_str)
     if root.is_dir():
         java_exts = frozenset({".java"})
         try:
@@ -110,25 +111,31 @@ def cmd_find(args: argparse.Namespace) -> int:
                 if str_path in seen_files:
                     continue
                 for m in detect_lombok_members(str_path):
-                    if m.name == args.name:
-                        hits.append((str_path, m.line, f"lombok-{m.kind}", m.name))
+                    if m.name == name:
+                        hits.append((str_path, m.line, f"lombok-{m.kind}", name))
                         seen_files.add(str_path)
                         break
         except OSError:
             pass
+    hits.sort()
+    return hits
+
+
+def cmd_find(args: argparse.Namespace) -> int:
+    hits = get_find_hits(args.name, args.path)
     if not hits:
         print(f"no symbol named '{args.name}' under {args.path}", file=sys.stderr)
         return 1
-    hits.sort()
     for file, ln, kind, name in hits:
         print(f"{file}:{ln}  {kind}  {name}")
     return 0
 
 
-def cmd_outline(args: argparse.Namespace) -> int:
-    if not Path(args.file).is_file():
-        die(f"no such file: {args.file}")
-    rc, out, _ = run([CTAGS, "--fields=+Kzn", "-f", "-", args.file])
+def get_outline_rows(file_path: str) -> list[tuple[int, str, str]]:
+    """Gathers rows of (line, kind, name) symbols for the file outline."""
+    if not Path(file_path).is_file():
+        die(f"no such file: {file_path}")
+    rc, out, _ = run([CTAGS, "--fields=+Kzn", "-f", "-", file_path])
     if rc != 0:
         die("ctags failed", 2)
     rows: list[tuple[int, str, str]] = []
@@ -136,12 +143,12 @@ def cmd_outline(args: argparse.Namespace) -> int:
         parsed = _parse_ctags_line(line)
         if not parsed:
             continue
-        _, _, kind, line_no = parsed
+        c_name, _, kind, line_no = parsed
         try:
             ln = int(line_no)
         except ValueError:
             continue
-        rows.append((ln, kind, parsed[0]))
+        rows.append((ln, kind, c_name))
     # Fallback for brace-langs when ctags misses class members (the
     # ctags 5.9.0 TS parser bug after generic-arg field initializers).
     # TS/JS can be partial: ctags may return methods before `inject<T>(...)`
@@ -150,23 +157,28 @@ def cmd_outline(args: argparse.Namespace) -> int:
     # for normal member outlines and the regex is declaration-level only.
     n_methods = sum(1 for _, k, _ in rows if k == "method")
     try:
-        lang: str | None = lang_of(args.file, None)
+        lang: str | None = lang_of(file_path, None)
     except SystemExit:
         lang = None
     if lang in ("typescript", "javascript") or (n_methods == 0 and lang == "java"):
-        seen = {(r[2]) for r in rows}  # avoid duplicating names ctags DID get
-        rows.extend(_regex_outline_methods(args.file, lang, seen))
+        seen = {r[2] for r in rows}  # avoid duplicating names ctags DID get
+        rows.extend(_regex_outline_methods(file_path, lang, seen))
     # Lombok: infer generated methods from annotations (Java only)
     if lang == "java":
         seen = {r[2] for r in rows}
-        for m in detect_lombok_members(args.file):
+        for m in detect_lombok_members(file_path):
             if m.name not in seen:
                 rows.append((m.line, f"lombok-{m.kind}", m.name))
                 seen.add(m.name)
+    rows.sort()
+    return rows
+
+
+def cmd_outline(args: argparse.Namespace) -> int:
+    rows = get_outline_rows(args.file)
     if not rows:
         print(f"no symbols indexed in {args.file}", file=sys.stderr)
         return 1
-    rows.sort()
     for ln, kind, name in rows:
         print(f"{ln:>5}  {kind:<12}  {name}")
     return 0

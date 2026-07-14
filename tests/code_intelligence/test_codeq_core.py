@@ -458,12 +458,12 @@ def test_codeq_json_output(fixture_dir: Path) -> None:
     assert "imports" not in data
     assert data["internal_call_hints"] == []
 
-    # body: text envelope
+    # body: structured JSON
     result = run(["codeq", "--json", "body", "calculate", str(file_path)])
     data = json.loads(result.stdout)
     assert data["command"] == "body"
     assert data["exit_code"] == 0
-    assert "def calculate" in data["output"]
+    assert "def calculate" in data["body"]
 
     # error case: missing symbol
     result = run(

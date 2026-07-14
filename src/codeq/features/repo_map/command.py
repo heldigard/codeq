@@ -9,6 +9,7 @@ import tokenize
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from codeq.shared.config import CTAGS, _RESERVED_KEYWORDS
 from codeq.shared.core import _parse_ctags_line, ctags_exclude_args, die, run
@@ -259,16 +260,16 @@ def _freq_pass(per_file: dict[str, list[_Sym]]) -> _FreqAccum:
     return acc
 
 
-def cmd_map(args: argparse.Namespace) -> int:
-    """Repo orientation map (aider-style): the most-referenced files and their
-    hottest symbols, ONE bounded call instead of a Glob/Read exploration sweep.
-    Reference weight = project-wide identifier frequency (single scan pass) —
-    approximate by design; it ranks, it does not prove. `--save` refreshes
-    <root>/.memory-bank/topics/code-map.md so the orientation persists across
-    sessions (memory-bank synergy: explore once, remember forever)."""
-    root = Path(args.path).resolve()
+def get_repo_map_data(
+    path_str: str,
+    include_tests: bool = False,
+    top_n: int = 20,
+    syms_per_file: int = 6,
+) -> dict[str, Any] | None:
+    """Gathers repository map details (hot files and symbols ranked by reference weight)."""
+    root = Path(path_str).resolve()
     if not root.is_dir():
-        die(f"no such directory: {args.path}")
+        return None
     with tempfile.NamedTemporaryFile(suffix=".tags", delete=False) as tf:
         tags_path = tf.name
     try:
@@ -278,7 +279,7 @@ def cmd_map(args: argparse.Namespace) -> int:
         rc, _, err = run(cmd)
         if rc != 0:
             die(f"ctags failed: {err.strip()}", 2)
-        per_file = _collect_indexed_symbols(tags_path, args.tests, root)
+        per_file = _collect_indexed_symbols(tags_path, include_tests, root)
     finally:
         Path(tags_path).unlink(missing_ok=True)
 
@@ -286,8 +287,12 @@ def cmd_map(args: argparse.Namespace) -> int:
     _merge_lombok_members(per_file)
 
     if not per_file:
-        print(f"no symbols indexed under {root}", file=sys.stderr)
-        return 1
+        return {
+            "root": str(root),
+            "files_indexed": 0,
+            "symbols_indexed": 0,
+            "files": [],
+        }
     # One frequency pass over the indexed source files (vendor already excluded).
     # Python files use tokenize-exact counting (excludes STRING/COMMENT tokens);
     # other langs use the regex best-effort extractor.
@@ -296,8 +301,12 @@ def cmd_map(args: argparse.Namespace) -> int:
     for file in minified:
         per_file.pop(file, None)
     if not per_file:
-        print(f"only generated/minified files under {root}", file=sys.stderr)
-        return 1
+        return {
+            "root": str(root),
+            "files_indexed": 0,
+            "symbols_indexed": 0,
+            "files": [],
+        }
 
     def sym_weight(name: str) -> int:
         # Shared attribution: a name defined in N places (main/check/run
@@ -311,28 +320,78 @@ def cmd_map(args: argparse.Namespace) -> int:
         weighted = sorted(
             ((ln, kind, name, sym_weight(name)) for ln, kind, name in syms),
             key=lambda t: -t[3],
-        )[: args.syms]
+        )[:syms_per_file]
         score = sum(w for *_, w in weighted)
         ranked_files.append((score, file, weighted))
     ranked_files.sort(key=lambda t: (-t[0], t[1]))
-    top = ranked_files[: args.top]
+    top = ranked_files[:top_n]
 
-    lines: list[str] = []
     total_syms = sum(len(s) for s in per_file.values())
-    lines.append(
-        f"REPO MAP  {root}  ({len(per_file)} files, {total_syms} symbols; "
-        f"top {len(top)} by reference weight)"
-    )
+    files_list = []
     for score, file, weighted in top:
         try:
             rel = str(Path(file).resolve().relative_to(root))
         except ValueError:
             rel = file
-        lines.append(f"{rel}  (weight {score})")
+        syms_list = []
         for ln, kind, name, w in weighted:
-            lines.append(f"    {ln:>5}  {kind:<10} {name}  ~{w} refs")
+            syms_list.append(
+                {
+                    "line": ln,
+                    "kind": kind,
+                    "name": name,
+                    "references": w,
+                }
+            )
+        files_list.append(
+            {
+                "file": rel,
+                "weight": score,
+                "symbols": syms_list,
+            }
+        )
+
+    return {
+        "command": "map",
+        "root": str(root),
+        "files_indexed": len(per_file),
+        "symbols_indexed": total_syms,
+        "files": files_list,
+    }
+
+
+def cmd_map(args: argparse.Namespace) -> int:
+    """Repo orientation map (aider-style): the most-referenced files and their
+    hottest symbols, ONE bounded call instead of a Glob/Read exploration sweep.
+    Reference weight = project-wide identifier frequency (single scan pass) —
+    approximate by design; it ranks, it does not prove. `--save` refreshes
+    <root>/.memory-bank/topics/code-map.md so the orientation persists across
+    sessions (memory-bank synergy: explore once, remember forever)."""
+    data = get_repo_map_data(
+        args.path,
+        include_tests=args.tests,
+        top_n=args.top,
+        syms_per_file=args.syms,
+    )
+    if data is None:
+        die(f"no such directory: {args.path}")
+    if not data["files"]:
+        print(f"no symbols indexed under {args.path}", file=sys.stderr)
+        return 1
+
+    lines: list[str] = []
+    lines.append(
+        f"REPO MAP  {data['root']}  ({data['files_indexed']} files, {data['symbols_indexed']} symbols; "
+        f"top {len(data['files'])} by reference weight)"
+    )
+    for f in data["files"]:
+        lines.append(f"{f['file']}  (weight {f['weight']})")
+        for s in f["symbols"]:
+            lines.append(
+                f"    {s['line']:>5}  {s['kind']:<10} {s['name']}  ~{s['references']} refs"
+            )
     out_text = "\n".join(lines)
     print(out_text)
     if args.save:
-        _save_map(root, out_text)
+        _save_map(Path(data["root"]), out_text)
     return 0

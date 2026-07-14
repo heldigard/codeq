@@ -12,7 +12,7 @@ CAPABILITIES: tuple[dict[str, Any], ...] = (
         "destructive": False,
         "idempotent": True,
         "open_world": False,
-        "structured_json": False,
+        "structured_json": True,
     },
     {
         "name": "outline",
@@ -21,7 +21,7 @@ CAPABILITIES: tuple[dict[str, Any], ...] = (
         "destructive": False,
         "idempotent": True,
         "open_world": False,
-        "structured_json": False,
+        "structured_json": True,
     },
     {
         "name": "body",
@@ -30,7 +30,7 @@ CAPABILITIES: tuple[dict[str, Any], ...] = (
         "destructive": False,
         "idempotent": True,
         "open_world": False,
-        "structured_json": False,
+        "structured_json": True,
     },
     {
         "name": "class",
@@ -39,7 +39,7 @@ CAPABILITIES: tuple[dict[str, Any], ...] = (
         "destructive": False,
         "idempotent": True,
         "open_world": False,
-        "structured_json": False,
+        "structured_json": True,
     },
     {
         "name": "sig",
@@ -48,7 +48,7 @@ CAPABILITIES: tuple[dict[str, Any], ...] = (
         "destructive": False,
         "idempotent": True,
         "open_world": False,
-        "structured_json": False,
+        "structured_json": True,
     },
     {
         "name": "refs",
@@ -84,7 +84,7 @@ CAPABILITIES: tuple[dict[str, Any], ...] = (
         "destructive": False,
         "idempotent": True,
         "open_world": False,
-        "structured_json": False,
+        "structured_json": True,
     },
     {
         "name": "tags",
@@ -93,7 +93,7 @@ CAPABILITIES: tuple[dict[str, Any], ...] = (
         "destructive": False,
         "idempotent": True,
         "open_world": False,
-        "structured_json": False,
+        "structured_json": True,
     },
     {
         "name": "check",
@@ -102,7 +102,7 @@ CAPABILITIES: tuple[dict[str, Any], ...] = (
         "destructive": False,
         "idempotent": True,
         "open_world": False,
-        "structured_json": False,
+        "structured_json": True,
     },
     {
         "name": "summary",
@@ -111,7 +111,7 @@ CAPABILITIES: tuple[dict[str, Any], ...] = (
         "destructive": False,
         "idempotent": True,
         "open_world": False,
-        "structured_json": False,
+        "structured_json": True,
     },
     {
         "name": "context",
@@ -138,7 +138,7 @@ CAPABILITIES: tuple[dict[str, Any], ...] = (
         "destructive": True,
         "idempotent": False,
         "open_world": False,
-        "structured_json": False,
+        "structured_json": True,
     },
     {
         "name": "doctor",
@@ -147,7 +147,7 @@ CAPABILITIES: tuple[dict[str, Any], ...] = (
         "destructive": False,
         "idempotent": True,
         "open_world": True,
-        "structured_json": False,
+        "structured_json": True,
     },
 )
 

@@ -11,6 +11,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+from typing import Any
 
 # Tool registry. `managers` maps an installer key to a shell command. The
 # NO_SUDO list is tried first for `--install`; apt/brew/script are manual hints.
@@ -174,34 +175,58 @@ def _manual_hint(tool: dict[str, object]) -> str:
     return f"manual: {cmd}" if cmd else "no install hint"
 
 
-def cmd_doctor(args: argparse.Namespace) -> int:
-    """Report external-binary status; optionally install missing ones."""
-    print(
-        f"codeq dependency check (platform: {platform.system()} {platform.machine()})"
-    )
-    required_missing: list[dict[str, object]] = []
-    # Detect each binary ONCE; reuse the result for the report, the required
-    # check, and the missing-summary (a previous version re-ran `_detect` in a
-    # list comprehension, spawning `--version` twice per tool).
-    detected: list[tuple[dict[str, object], str | None]] = []
+def get_doctor_data() -> dict[str, Any]:
+    """Gathers status, version, and importance information for all external tool dependencies."""
+    tools_data = []
+    required_missing = False
     for tool in TOOLS:
         path, ver = _detect_tool(tool)
-        detected.append((tool, path))
-        status = "OK" if path else "MISSING"
         imp = str(tool["importance"])
-        detail = ver or "(no version)"
-        print(f"  {str(tool['name']):<12} {status:<8} {imp:<8} {detail}")
+        tools_data.append(
+            {
+                "name": str(tool["name"]),
+                "status": "OK" if path else "MISSING",
+                "importance": imp,
+                "why": str(tool["why"]),
+                "version": ver or None,
+                "path": path,
+                "install_hint": _manual_hint(tool),
+            }
+        )
         if not path and imp == "required":
-            required_missing.append(tool)
-        if not path and args.install:
-            print(f"  -> {_try_install(tool)}")
-    missing_any = [t for (t, path) in detected if not path]
+            required_missing = True
+    return {
+        "command": "doctor",
+        "platform": platform.system(),
+        "machine": platform.machine(),
+        "required_missing": required_missing,
+        "tools": tools_data,
+    }
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """Report external-binary status; optionally install missing ones."""
+    data = get_doctor_data()
+    print(f"codeq dependency check (platform: {data['platform']} {data['machine']})")
+    required_missing = []
+    for t in data["tools"]:
+        print(
+            f"  {t['name']:<12} {t['status']:<8} {t['importance']:<8} {t['version'] or '(no version)'}"
+        )
+        if t["status"] == "MISSING":
+            tool_entry = next(tool for tool in TOOLS if tool["name"] == t["name"])
+            if t["importance"] == "required":
+                required_missing.append(tool_entry)
+            if args.install:
+                print(f"  -> {_try_install(tool_entry)}")
+
+    missing_any = [t for t in data["tools"] if t["status"] == "MISSING"]
     if missing_any and not args.install:
         print("\nmissing binaries — install hints:")
-        for tool in missing_any:
-            print(f"  {str(tool['name']):<12} {_manual_hint(tool)}")
+        for t in missing_any:
+            print(f"  {t['name']:<12} {t['install_hint']}")
         print("\nor run: codeq doctor --install")
-    if required_missing:
+    if required_missing and not args.install:
         print(
             "\nrequired binaries missing — some commands will not work until installed.",
             file=sys.stderr,

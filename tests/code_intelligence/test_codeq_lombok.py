@@ -118,8 +118,9 @@ def test_lombok_json_outline(fixture_dir: Path) -> None:
     )
     data = json.loads(result.stdout)
     assert data["exit_code"] == 0
-    assert "getId" in data["output"]
-    assert "setName" in data["output"]
+    names = {sym["name"] for sym in data["symbols"]}
+    assert "getId" in names
+    assert "setName" in names
 
 
 def test_lombok_boolean_primitive_is_only() -> None:
