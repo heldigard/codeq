@@ -153,7 +153,7 @@ def _py_refs_in_file(name: str, f: Path) -> list[str]:
         if lineno is not None and lineno not in seen:
             seen.add(lineno)
             matches.append(lineno)
-    for lineno in sorted(set(matches)):
+    for lineno in sorted(matches):
         text = lines[lineno - 1] if 0 < lineno <= len(lines) else ""
         rows.append(f"{f}:{lineno}:{text}")
     return rows
