@@ -7,9 +7,11 @@ on a fixed set of representative functions, across a candidate model list,
 and writes the results to JSON + Markdown so future runs can compare against
 prior baselines.
 
-Why this exists: codeq's default summary model was chosen by this benchmark
-(2026-06-28: gemma-4-12B-it-qat beat qwen3.5:4b on both speed and quality).
-Re-run it whenever you install new models or want to re-validate the choice.
+Why this exists: codeq's default summary model is re-validated by this
+benchmark every time the ollama-bench lineup changes. Current winner per
+`~/ollama-bench/RANKING.md` 2026-07-09 validation: Qwythos-9B-Claude-Mythos
+(9.40) over batiai/gemma4-e4b:q4 (9.19). Re-run whenever you install new
+models or want to re-validate the choice.
 
 Usage:
   python3 ~/codeq/scripts/codeq-model-bench.py                     # default models
@@ -41,16 +43,17 @@ from _bench_samples import SAMPLES
 
 # Default candidate set — the models worth comparing for the summary task.
 # (Embedding models excluded — they can't generate.) Override with -m.
-# Aligned with ~/ollama-bench/RANKING.md 2026-07-08: batiai/gemma4-e4b:q4 is the
-# current codeq_sum #1. SetneufPT and batiai/gemma4-e4b:q4 stay as regression
-# baselines. MobiusDevelopment/gemma-4-12B-it-qat was removed.
+# Aligned with ~/ollama-bench/RANKING.md 2026-07-09 validation (codeq_sum):
+#   1. Qwythos-9B-Claude-Mythos  (9.40)  <- current default in codeq.shared.llm
+#   2. batiai/gemma4-e4b:q4      (9.19)  <- current fallback in codeq.shared.llm
+#   3. SetneufPT/Qwopus3.5-4B    (8.99)  <- structured-output champion (tool_call)
+# Re-validate when RANKING.md changes; keep this list in sync.
 DEFAULT_MODELS = [
-    "batiai/gemma4-e4b:q4",  # 2026-07-08 codeq_sum #1
-    "SetneufPT/Qwopus3.5-4B-Coder-MTP_Q4_64k_8GB-GPU:latest",
-    "batiai/gemma4-e4b:q4",
-    "qwen3.5:4b",  # ollama_client global default / universal fallback
-    "fredrezones55/Qwen3.5-Uncensored-HauhauCS-Aggressive:4b",
-    "zfujicute/OmniCoder-Qwen3.5-9B-Claude-4.6-Opus-Uncensored-v2-GGUF:latest",
+    "hf.co/empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF:Q4_K_M",  # codeq_sum #1
+    "batiai/gemma4-e4b:q4",  # codeq_sum #2
+    "SetneufPT/Qwopus3.5-4B-Coder-MTP_Q4_64k_8GB-GPU:latest",  # codeq_sum #3
+    "qwen3.5:4b",  # ollama_client global default / universal fallback baseline
+    "fredrezones55/Qwen3.5-Uncensored-HauhauCS-Aggressive:4b",  # historical contender
 ]
 
 
@@ -144,7 +147,9 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="force cold calls (default: use ollama_client cache for stable input)",
     )
-    ap.add_argument("--json", action="store_true", help="emit JSON instead of human-readable")
+    ap.add_argument(
+        "--json", action="store_true", help="emit JSON instead of human-readable"
+    )
     return ap
 
 
@@ -189,7 +194,9 @@ def _format_result_line(r: dict) -> str:
     if not r["respects_30w"]:
         flags.append(f"{r['words']}w > 30")
     tag = f" — {' / '.join(flags)}" if flags else ""
-    return f"\n[{r['model']}]  ({r['seconds']}s, {r['words']} words{tag})\n  {r['text']}"
+    return (
+        f"\n[{r['model']}]  ({r['seconds']}s, {r['words']} words{tag})\n  {r['text']}"
+    )
 
 
 def _results_for_sample(results: list[dict], sample: str) -> list[dict]:
@@ -220,7 +227,9 @@ def _format_markdown_row(r: dict) -> str:
     )
 
 
-def _write_markdown(path: str, results: list[dict], models: list[str], use_cache: bool) -> None:
+def _write_markdown(
+    path: str, results: list[dict], models: list[str], use_cache: bool
+) -> None:
     lines = [
         "# codeq summary-model benchmark — snapshot",
         "",
@@ -241,7 +250,9 @@ def _write_markdown(path: str, results: list[dict], models: list[str], use_cache
     for sample in [s[0] for s in SAMPLES]:
         lines.append(f"### {sample}")
         lines.append("")
-        lines.append("| model | seconds | words | respects 30w | leaks code | summary |")
+        lines.append(
+            "| model | seconds | words | respects 30w | leaks code | summary |"
+        )
         lines.append("|---|---|---|---|---|---|")
         for r in _results_for_sample(results, sample):
             lines.append(_format_markdown_row(r))

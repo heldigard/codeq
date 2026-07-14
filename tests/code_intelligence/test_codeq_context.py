@@ -244,3 +244,49 @@ def test_codeq_relations_no_llm_sections() -> None:
         assert "return b" not in out, (
             f"relations leaked the body (should be cheaper than context): {out!r}"
         )
+
+
+def test_codeq_body_summary_help_mentions_actual_default() -> None:
+    """Regression (2026-07-13): `codeq body --help` previously claimed the
+    default summary model was `batiai/gemma4-e4b:q4`, but the ACTUAL default
+    in `codeq.shared.llm._CODEQ_SUMMARY_MODEL` is the codeq_sum #1
+    `Qwythos-9B` (per `~/ollama-bench/RANKING.md` 2026-07-09 validation).
+    An agent that read `--help` and trusted the stale text wired the wrong
+    model into a downstream pipeline. This test asserts the help text
+    contains a substring of the live default, so future drift between
+    docs/help and the constant fails CI immediately.
+
+    Also asserts the help text names a real model (substring of either the
+    default or the fallback) so we never regress to a totally vague hint.
+    """
+    # Import lazily so the test still loads on hosts where ollama_client is
+    # absent — we only need the constant string, not the Ollama daemon.
+    from codeq.shared import llm  # type: ignore[import-not-found]
+
+    default = llm._CODEQ_SUMMARY_MODEL  # type: ignore[attr-defined]
+    fallback = llm._CODEQ_FALLBACK_MODEL  # type: ignore[attr-defined]
+
+    r = subprocess.run(
+        ["codeq", "body", "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert r.returncode == 0, f"codeq body --help failed: {r.stderr}"
+    help_text = r.stdout
+
+    # The help text MUST contain a substring of the live default model.
+    # 'Qwythos-9B' is a substring of the full HF path; that's the README
+    # short-tag form so help text and README stay aligned.
+    assert "Qwythos-9B" in help_text, (
+        f"codeq body --help does not mention the actual default model "
+        f"({default!r}). Help text was:\n{help_text}\n"
+        f"Update the help string in src/codeq/cli.py to match the constant."
+    )
+
+    # The help text must ALSO mention the fallback (so users with VRAM-tight
+    # hosts know about it from --help alone, not only from the README).
+    assert fallback in help_text or "batiai/gemma4-e4b:q4" in help_text, (
+        f"codeq body --help does not mention the fallback model ({fallback!r}). "
+        f"Help text was:\n{help_text}"
+    )
