@@ -34,9 +34,7 @@ export class X {
         (d / "caller.ts").write_text(
             "import { X } from './mod';\nexport function run(x: X, s: string) {\n  return x.doWork(s);\n}\n"
         )
-        (d / "host.ts").write_text(
-            "import { X } from './mod';\nexport const componentType = X;\n"
-        )
+        (d / "host.ts").write_text("import { X } from './mod';\nexport const componentType = X;\n")
 
         # `summary --no-llm` → stdout empty (the LLM isn't needed for the body),
         # stderr has the disabled-prefix note.
@@ -67,9 +65,7 @@ export class X {
             env=env_no_llm,
             check=False,
         )
-        assert r.returncode == 0, (
-            f"body --summary --no-llm should exit 0: rc={r.returncode}"
-        )
+        assert r.returncode == 0, f"body --summary --no-llm should exit 0: rc={r.returncode}"
         assert "doWork(input: string)" in r.stdout, (
             f"body --summary --no-llm lost the body: {r.stdout!r}"
         )
@@ -134,12 +130,11 @@ export class X {
         # The symbol's OWN name must NOT leak as a self-call hint (the regex
         # would otherwise match the signature line `doWork(...)`). Bug fixed
         # 2026-06-28 via the exclude_name param on _body_call_hints.
-        hint_block = r.stdout.split("=== Internal call hints", 1)[-1].split(
-            "=== External refs", 1
-        )[0]
-        assert (
-            "\n# - doWork" not in hint_block
-            and "doWork()" not in hint_block.replace("this.svc.process", "")
+        hint_block = r.stdout.split("=== Internal call hints", 1)[-1].split("=== External refs", 1)[
+            0
+        ]
+        assert "\n# - doWork" not in hint_block and "doWork()" not in hint_block.replace(
+            "this.svc.process", ""
         ), f"relations leaked the symbol's own name as a call hint: {hint_block!r}"
 
 
@@ -163,9 +158,7 @@ def test_codeq_summary_and_context_live() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp) / "live"
         d.mkdir()
-        (d / "greet.py").write_text(
-            "def greet(name: str) -> str:\n    return f'Hello, {name}!'\n"
-        )
+        (d / "greet.py").write_text("def greet(name: str) -> str:\n    return f'Hello, {name}!'\n")
         r = subprocess.run(
             ["codeq", "summary", "greet", str(d / "greet.py")],
             capture_output=True,
@@ -174,14 +167,10 @@ def test_codeq_summary_and_context_live() -> None:
         )
         if r.returncode != 0:
             return  # model returned empty / transport flake — skip, not a hard fail
-        assert "ollama-summary:" in r.stdout, (
-            f"live summary missing banner: {r.stdout!r}"
-        )
+        assert "ollama-summary:" in r.stdout, f"live summary missing banner: {r.stdout!r}"
         # The summary line should NOT contain a code block fence or the body itself
         # (proves we're returning a short prose description, not the source).
-        assert "def greet" not in r.stdout, (
-            f"live summary leaked the body: {r.stdout!r}"
-        )
+        assert "def greet" not in r.stdout, f"live summary leaked the body: {r.stdout!r}"
 
 
 def test_codeq_relations_no_llm_sections() -> None:
@@ -229,17 +218,13 @@ def test_codeq_relations_no_llm_sections() -> None:
             f"relations --no-llm should succeed: rc={r.returncode} stderr={r.stderr!r}"
         )
         out = r.stdout
-        assert "[codeq relations" in out, (
-            f"relations missing the provenance header: {out!r}"
-        )
+        assert "[codeq relations" in out, f"relations missing the provenance header: {out!r}"
         assert "Signature" in out, f"relations missing Signature section: {out!r}"
         # Both internal callees should surface as call hints (regex over body).
         assert "helper()" in out, f"relations missing helper() call hint: {out!r}"
         assert "util()" in out, f"relations missing util() call hint: {out!r}"
         # The AST-exact refs half should find the caller.py reference.
-        assert "caller.py" in out, (
-            f"relations missing the external ref from caller.py: {out!r}"
-        )
+        assert "caller.py" in out, f"relations missing the external ref from caller.py: {out!r}"
         # relations must NOT embed the full body (that's `context`'s job).
         assert "return b" not in out, (
             f"relations leaked the body (should be cheaper than context): {out!r}"
@@ -247,10 +232,10 @@ def test_codeq_relations_no_llm_sections() -> None:
 
 
 def test_codeq_body_summary_help_mentions_actual_default() -> None:
-    """Regression (2026-07-13): `codeq body --help` previously claimed the
-    default summary model was `batiai/gemma4-e4b:q4`, but the ACTUAL default
-    in `codeq.shared.llm._CODEQ_SUMMARY_MODEL` is the codeq_sum #1
-    `Qwythos-9B` (per `~/ollama-bench/RANKING.md` 2026-07-09 validation).
+    """Regression (2026-07-13 + 2026-07-13 round-17): `codeq body --help`
+    must name the ACTUAL default summary model in `codeq.shared.llm`.
+    Round-9 set Qwythos-9B; round-17 (2026-07-13) dethroned it with
+    TeichAI/Fable-5-v1 (fresh 5-way 9.84 vs 9.40, +4.7%).
     An agent that read `--help` and trusted the stale text wired the wrong
     model into a downstream pipeline. This test asserts the help text
     contains a substring of the live default, so future drift between
@@ -276,9 +261,9 @@ def test_codeq_body_summary_help_mentions_actual_default() -> None:
     help_text = r.stdout
 
     # The help text MUST contain a substring of the live default model.
-    # 'Qwythos-9B' is a substring of the full HF path; that's the README
-    # short-tag form so help text and README stay aligned.
-    assert "Qwythos-9B" in help_text, (
+    # Round-17 default is TeichAI/Fable-5-v1 — substring 'Fable-5-v1' is
+    # present in both help text and README, keeping them aligned.
+    assert "Fable-5-v1" in help_text or "TeichAI" in help_text, (
         f"codeq body --help does not mention the actual default model "
         f"({default!r}). Help text was:\n{help_text}\n"
         f"Update the help string in src/codeq/cli.py to match the constant."
@@ -286,7 +271,7 @@ def test_codeq_body_summary_help_mentions_actual_default() -> None:
 
     # The help text must ALSO mention the fallback (so users with VRAM-tight
     # hosts know about it from --help alone, not only from the README).
-    assert fallback in help_text or "batiai/gemma4-e4b:q4" in help_text, (
+    assert fallback in help_text or "Qwythos" in help_text, (
         f"codeq body --help does not mention the fallback model ({fallback!r}). "
         f"Help text was:\n{help_text}"
     )

@@ -36,25 +36,29 @@ _OLLAMA_DISABLED_PREFIX = (
 )
 
 # Model used for the `summary`/`context`/`relations`/`--summary` paths.
-# Confirmed PRIMARY by the 2026-07-12 round-9 4-way bench (generate protocol):
-# Qwythos-9B = 9.40 (#1), batiai/gemma4-e4b:q4 = 9.19 (#2), Qwopus3.5-4B = 8.99.
-# Qwythos validated isolated 2026-07-13 (9.17) — its deep-multi-model -100 is a
-# bench artifact (identity loop under sustained load), not a regression;
-# production calls it solo. Intentionally single-model: the summary is optional
-# enrichment, so on model/daemon failure codeq degrades to no-summary (the
-# `[ollama summary unavailable]` note) rather than retrying a runner-up — unlike
-# smart-trim, which wires a real secondary because compaction must stay fail-open.
-# Override CODEQ_SUMMARY_MODEL=batiai/gemma4-e4b:q4 on VRAM-tight hosts (Qwythos
-# is 6.8GB). Source of truth: ~/ollama-bench/RANKING.md ## codeq_sum.
+# Confirmed PRIMARY by the 2026-07-13 round-17 fresh 5-way bench (generate protocol):
+# TeichAI/Qwen3.5-9B-Fable-5-v1 = 9.84 (#1), Qwythos-9B = 9.40 (#2),
+# batiai/gemma4-e4b:q4 = 9.19 (#3), SetneufPT/Qwopus3.5-4B = 8.99 (#4),
+# jaahas/crow:9b = 8.87 (#5).
+# Round-17 dethrone: TeichAI (web_synth + improve champion) was never tested
+# against Qwythos in codeq_sum directly — round-9 4-way only included Qwythos,
+# batiai, SetneufPT, OmniCoder. TeichAI multi-task: codeq_sum #1 + improve #2 +
+# web_synth #1.
+# Intentionally single-model: the summary is optional enrichment, so on
+# model/daemon failure codeq degrades to no-summary (the `[ollama summary
+# unavailable]` note) rather than retrying a runner-up — unlike smart-trim,
+# which wires a real secondary because compaction must stay fail-open.
+# Override CODEQ_SUMMARY_MODEL=Qwythos on VRAM-tight hosts (TeichAI is 6.5GB).
+# Source of truth: ~/ollama-bench/RANKING.md ## codeq_sum.
 _CODEQ_SUMMARY_MODEL = os.environ.get(
     "CODEQ_SUMMARY_MODEL",
-    "hf.co/empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF:Q4_K_M",
+    "hf.co/TeichAI/Qwen3.5-9B-Fable-5-v1-GGUF:Q4_K_M",
 )
-# Fallback when the primary (6.8GB) can't load — VRAM-tight hosts or GPU
-# contention. batiai/gemma4-e4b:q4 is codeq_sum #2 (round-9, 9.19) at 5.3GB.
+# Fallback when the primary (6.5GB) can't load — VRAM-tight hosts or GPU
+# contention. Qwythos-9B is codeq_sum #2 (round-9 9.40, held round-17) at 6.8GB.
 _CODEQ_FALLBACK_MODEL = os.environ.get(
     "CODEQ_FALLBACK_MODEL",
-    "batiai/gemma4-e4b:q4",
+    "hf.co/empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF:Q4_K_M",
 )
 
 
