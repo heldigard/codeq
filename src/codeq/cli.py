@@ -59,7 +59,9 @@ examples:
     o.add_argument("file")
     o.set_defaults(func=cmd_outline)
 
-    b = sub.add_parser("body", help="exact def/class body without reading the whole file")
+    b = sub.add_parser(
+        "body", help="exact def/class body without reading the whole file"
+    )
     b.add_argument("name", help="symbol name (function/class)")
     b.add_argument("file", help="file containing the symbol")
     b.add_argument("-l", "--lang", default=None, help="override language")
@@ -103,7 +105,9 @@ examples:
     )
     tg.set_defaults(func=cmd_tags)
 
-    c = sub.add_parser("check", help="validate an ast-grep pattern (single-node) before running")
+    c = sub.add_parser(
+        "check", help="validate an ast-grep pattern (single-node) before running"
+    )
     c.add_argument("pattern", help="ast-grep -p pattern")
     c.add_argument("-l", "--lang", default=None, help="language (default: python)")
     c.set_defaults(func=cmd_check)
@@ -118,20 +122,32 @@ examples:
         default=200,
         help="max references to show (default: 200; 0 = unlimited)",
     )
+    r.add_argument(
+        "-q",
+        "--quick",
+        action="store_true",
+        help="cap at 20 refs for fast orientation (overrides --limit if larger)",
+    )
     r.set_defaults(func=cmd_refs)
 
-    sg = sub.add_parser("sig", help="signature only (header line(s); cheaper than body)")
+    sg = sub.add_parser(
+        "sig", help="signature only (header line(s); cheaper than body)"
+    )
     sg.add_argument("name", help="symbol name (function/class)")
     sg.add_argument("file", help="file containing the symbol")
     sg.add_argument("-l", "--lang", default=None, help="override language")
     sg.set_defaults(func=cmd_sig)
 
-    dp = sub.add_parser("deps", help="imports/dependencies of a file (context before editing)")
+    dp = sub.add_parser(
+        "deps", help="imports/dependencies of a file (context before editing)"
+    )
     dp.add_argument("file")
     dp.add_argument("-l", "--lang", default=None, help="override language")
     dp.set_defaults(func=cmd_deps)
 
-    rd = sub.add_parser("rdeps", help="reverse deps: which project files import this file")
+    rd = sub.add_parser(
+        "rdeps", help="reverse deps: which project files import this file"
+    )
     rd.add_argument("file", help="the module/file whose importers you want")
     rd.add_argument("-p", "--path", default=".", help="search root")
     rd.add_argument("-l", "--lang", default=None, help="override language")
@@ -171,7 +187,9 @@ examples:
     sm.add_argument("name", help="symbol name")
     sm.add_argument("file", help="file containing the symbol")
     sm.add_argument("-l", "--lang", default=None, help="override language")
-    sm.add_argument("--no-llm", action="store_true", help="skip Ollama (always emits a notice)")
+    sm.add_argument(
+        "--no-llm", action="store_true", help="skip Ollama (always emits a notice)"
+    )
     sm.set_defaults(func=cmd_summary)
 
     cx = sub.add_parser(
@@ -187,7 +205,15 @@ examples:
         help="project root for the `refs` half (default: cwd); ctags-style vendor excludes apply",
     )
     cx.add_argument("-l", "--lang", default=None, help="override language")
-    cx.add_argument("--no-llm", action="store_true", help="skip the Ollama summary half")
+    cx.add_argument(
+        "--no-llm", action="store_true", help="skip the Ollama summary half"
+    )
+    cx.add_argument(
+        "-q",
+        "--quick",
+        action="store_true",
+        help="cap refs half at 20 for fast orientation",
+    )
     cx.set_defaults(func=cmd_context)
 
     rl = sub.add_parser(
@@ -196,9 +222,19 @@ examples:
     )
     rl.add_argument("name", help="symbol name to map")
     rl.add_argument("file", help="file containing the symbol")
-    rl.add_argument("-p", "--path", default=".", help="project root for the `refs` half")
+    rl.add_argument(
+        "-p", "--path", default=".", help="project root for the `refs` half"
+    )
     rl.add_argument("-l", "--lang", default=None, help="override language")
-    rl.add_argument("--no-llm", action="store_true", help="skip the Ollama summary half")
+    rl.add_argument(
+        "--no-llm", action="store_true", help="skip the Ollama summary half"
+    )
+    rl.add_argument(
+        "-q",
+        "--quick",
+        action="store_true",
+        help="cap refs half at 20 for fast orientation",
+    )
     rl.set_defaults(func=cmd_relations)
 
     rn = sub.add_parser(

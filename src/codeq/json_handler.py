@@ -5,6 +5,10 @@ APIs (refs, deps, rdeps) build structured JSON directly; others capture
 stdout/stderr text in a JSON envelope.
 """
 
+# vs-soft-allow — one responsibility: Namespace → JSON envelope for each command.
+# Splitting one handler per file would scatter 17 trivial `_xxx_json` pairs
+# across the tree and hurt readability/scan-ability — cohesion over file count.
+
 from __future__ import annotations
 
 import argparse
@@ -26,6 +30,8 @@ def _refs_json(args: argparse.Namespace) -> int:
     from codeq.features.references.command import get_refs
 
     limit = getattr(args, "limit", 200) or 0
+    if getattr(args, "quick", False) and (limit == 0 or limit > 20):
+        limit = 20
     refs = get_refs(args.name, args.path, args.lang, limit=limit)
     return emit_json(
         {
@@ -36,6 +42,7 @@ def _refs_json(args: argparse.Namespace) -> int:
             "count": len(refs),
             "refs": refs,
             "truncated": bool(limit and len(refs) >= limit),
+            "quick": bool(getattr(args, "quick", False)),
         },
         0 if refs else 1,
     )
@@ -82,28 +89,51 @@ def _rdeps_json(args: argparse.Namespace) -> int:
 
 
 def _context_json(args: argparse.Namespace) -> int:
-    from codeq.features.code_context.command import build_context_payload
+    from codeq.features.code_context.command import (
+        _ContextOptions,
+        _QUICK_REFS_LIMIT,
+        build_context_payload,
+    )
 
     payload, exit_code = build_context_payload(
         args.name,
         args.file,
         args.path,
-        args.lang,
-        no_llm=getattr(args, "no_llm", False),
+        _ContextOptions(
+            lang_override=args.lang,
+            no_llm=getattr(args, "no_llm", False),
+            mode="full",
+        ),
     )
+    if getattr(args, "quick", False) and "refs" in payload:
+        refs = payload["refs"][:_QUICK_REFS_LIMIT]
+        payload["refs"] = refs
+        payload["refs_count"] = len(refs)
+        payload["truncated"] = payload.get("refs_count", 0) >= _QUICK_REFS_LIMIT
     return emit_json(payload, exit_code)
 
 
 def _relations_json(args: argparse.Namespace) -> int:
-    from codeq.features.code_context.command import build_relations_payload
+    from codeq.features.code_context.command import (
+        _ContextOptions,
+        _QUICK_REFS_LIMIT,
+        build_relations_payload,
+    )
 
     payload, exit_code = build_relations_payload(
         args.name,
         args.file,
         args.path,
-        args.lang,
-        no_llm=getattr(args, "no_llm", False),
+        _ContextOptions(
+            lang_override=args.lang,
+            no_llm=getattr(args, "no_llm", False),
+        ),
     )
+    if getattr(args, "quick", False) and "refs" in payload:
+        refs = payload["refs"][:_QUICK_REFS_LIMIT]
+        payload["refs"] = refs
+        payload["refs_count"] = len(refs)
+        payload["truncated"] = True
     return emit_json(payload, exit_code)
 
 
@@ -386,6 +416,22 @@ def _doctor_json(args: argparse.Namespace) -> int:
     return emit_json(data, exit_code)
 
 
+def _rename_error_payload(
+    args: argparse.Namespace, error: str, exit_code: int
+) -> dict[str, Any]:
+    """Shared rename-error envelope (validation/ast-grep failure paths)."""
+    return {
+        "command": "rename",
+        "old": args.old,
+        "new": args.new,
+        "lang": args.lang or "python",
+        "path": args.path,
+        "error": error,
+        "status": "error",
+        "exit_code": exit_code,
+    }
+
+
 def _rename_json(args: argparse.Namespace) -> int:
     from codeq.features.rename.command import (
         _validate_inputs,
@@ -395,40 +441,15 @@ def _rename_json(args: argparse.Namespace) -> int:
         _parse_applied_count,
     )
 
-    old = args.old
-    new = args.new
+    old, new = args.old, args.new
     lang = args.lang or "python"
     try:
         _validate_inputs(old, new, lang)
     except SystemExit:
-        return emit_json(
-            {
-                "command": "rename",
-                "old": old,
-                "new": new,
-                "lang": lang,
-                "path": args.path,
-                "error": "validation failed",
-                "status": "error",
-                "exit_code": 1,
-            },
-            1,
-        )
+        return emit_json(_rename_error_payload(args, "validation failed", 1), 1)
     rc, out, err = _run_astgrep(old, new, lang, args.path, args.dry_run)
     if rc not in (0, 1) or _looks_like_error(err):
-        return emit_json(
-            {
-                "command": "rename",
-                "old": old,
-                "new": new,
-                "lang": lang,
-                "path": args.path,
-                "error": err.strip() or f"rc={rc}",
-                "status": "error",
-                "exit_code": 2,
-            },
-            2,
-        )
+        return emit_json(_rename_error_payload(args, err.strip() or f"rc={rc}", 2), 2)
     if args.dry_run:
         n_matches = _count_dry_run_matches(old, new, lang, args.path)
         return emit_json(

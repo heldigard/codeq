@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,19 @@ from codeq.shared.llm import (
     _summarize_code,
 )
 from codeq.features.references.command import get_refs
+
+
+# Bound the optional behavior flags for `build_context_payload` so the signature
+# stays ≤ MAX_PARAMS (vertical-slice rule). `mode="full"` keeps the body + deps;
+# `mode="relations"` strips both — passed by `build_relations_payload`.
+@dataclass(frozen=True)
+class _ContextOptions:
+    lang_override: str | None = None
+    no_llm: bool = False
+    mode: str = "full"
+
+
+_QUICK_REFS_LIMIT = 20
 
 
 def cmd_summary(args: argparse.Namespace) -> int:
@@ -152,11 +166,7 @@ def build_context_payload(
     name: str,
     file: str,
     path: str,
-    lang_override: str | None = None,
-    *,
-    no_llm: bool = False,
-    include_body: bool = True,
-    include_dependencies: bool = True,
+    options: _ContextOptions | None = None,
 ) -> tuple[dict[str, Any], int]:
     """Build the same edit-context facts as `cmd_context`, but structured.
 
@@ -164,9 +174,16 @@ def build_context_payload(
     hand call gives the controller exact structural facts without asking it to
     parse Markdown sections.
     """
+    options = options or _ContextOptions()
+    include_body = options.mode == "full"
+    include_dependencies = options.mode == "full"
     if not Path(file).is_file():
-        return {"command": "context", "exit_code": 1, "error": f"no such file: {file}"}, 1
-    lang = lang_of(file, lang_override)
+        return {
+            "command": "context",
+            "exit_code": 1,
+            "error": f"no such file: {file}",
+        }, 1
+    lang = lang_of(file, options.lang_override)
     raw = _raw_body(file, name, lang)
     if raw is None:
         return {
@@ -187,7 +204,7 @@ def build_context_payload(
         "path": path,
         "lang": lang,
         "signature": _sig_from_raw(raw, lang),
-        "summary": _summary_payload(file, name, raw, no_llm=no_llm),
+        "summary": _summary_payload(file, name, raw, no_llm=options.no_llm),
         "refs": refs,
         "refs_count": len(refs),
     }
@@ -213,19 +230,19 @@ def build_relations_payload(
     name: str,
     file: str,
     path: str,
-    lang_override: str | None = None,
-    *,
-    no_llm: bool = False,
+    options: _ContextOptions | None = None,
 ) -> tuple[dict[str, Any], int]:
     """Build compact call-orientation facts for `codeq --json relations`."""
+    rel_options = options or _ContextOptions()
     payload, exit_code = build_context_payload(
         name,
         file,
         path,
-        lang_override,
-        no_llm=no_llm,
-        include_body=False,
-        include_dependencies=False,
+        _ContextOptions(
+            lang_override=rel_options.lang_override,
+            no_llm=rel_options.no_llm,
+            mode="relations",
+        ),
     )
     payload["command"] = "relations"
     if exit_code != 0:
@@ -265,7 +282,8 @@ def cmd_context(args: argparse.Namespace) -> int:
     _print_section("Body")
     print(raw)
     _print_section(f"Callers of '{args.name}' (refs across project)")
-    refs = get_refs(args.name, args.path, lang)
+    refs_limit = _QUICK_REFS_LIMIT if getattr(args, "quick", False) else 0
+    refs = get_refs(args.name, args.path, lang, limit=refs_limit)
     if refs:
         for line in refs:
             print(line)
@@ -318,7 +336,8 @@ def cmd_relations(args: argparse.Namespace) -> int:
             "# (no candidate method calls detected — body may be very short or text-only)"
         )
     _print_section(f"External refs — callers of '{args.name}'")
-    refs = get_refs(args.name, args.path, lang)
+    refs_limit = _QUICK_REFS_LIMIT if getattr(args, "quick", False) else 0
+    refs = get_refs(args.name, args.path, lang, limit=refs_limit)
     if refs:
         for line in refs:
             print(line)

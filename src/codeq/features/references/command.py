@@ -127,6 +127,8 @@ def cmd_refs(args: argparse.Namespace) -> int:
     environments. (Comments/strings can still match — ast-grep --lang is exact
     for that.)"""
     limit = getattr(args, "limit", 200) or 0
+    if getattr(args, "quick", False) and (limit == 0 or limit > 20):
+        limit = 20
     refs = get_refs(args.name, args.path, args.lang, limit=limit)
     if not refs:
         print(f"no references to '{args.name}' under {args.path}", file=sys.stderr)
@@ -135,7 +137,7 @@ def cmd_refs(args: argparse.Namespace) -> int:
         print(line)
     if limit and len(refs) >= limit:
         print(
-            "... more references may exist (narrow with --path or increase --limit)",
+            f"... more references may exist (--quick capped at {limit}; raise --limit for more)",
             file=sys.stderr,
         )
     return 0
