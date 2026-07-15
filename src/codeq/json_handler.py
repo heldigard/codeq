@@ -106,10 +106,9 @@ def _context_json(args: argparse.Namespace) -> int:
         ),
     )
     if getattr(args, "quick", False) and "refs" in payload:
-        refs = payload["refs"][:_QUICK_REFS_LIMIT]
-        payload["refs"] = refs
-        payload["refs_count"] = len(refs)
-        payload["truncated"] = payload.get("refs_count", 0) >= _QUICK_REFS_LIMIT
+        payload["refs"] = payload["refs"][:_QUICK_REFS_LIMIT]
+        payload["refs_count"] = len(payload["refs"])
+        payload["truncated"] = len(payload["refs"]) >= _QUICK_REFS_LIMIT
     return emit_json(payload, exit_code)
 
 
@@ -130,10 +129,9 @@ def _relations_json(args: argparse.Namespace) -> int:
         ),
     )
     if getattr(args, "quick", False) and "refs" in payload:
-        refs = payload["refs"][:_QUICK_REFS_LIMIT]
-        payload["refs"] = refs
-        payload["refs_count"] = len(refs)
-        payload["truncated"] = True
+        payload["refs"] = payload["refs"][:_QUICK_REFS_LIMIT]
+        payload["refs_count"] = len(payload["refs"])
+        payload["truncated"] = len(payload["refs"]) >= _QUICK_REFS_LIMIT
     return emit_json(payload, exit_code)
 
 
