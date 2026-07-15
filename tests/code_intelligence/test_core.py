@@ -1,5 +1,6 @@
 """Unit tests for codeq.shared.core — covers _parse_ctags_line edge cases,
 ctags_exclude_args, run() timeout handling, and lang_of()."""
+
 from __future__ import annotations
 
 import subprocess
@@ -20,6 +21,7 @@ from codeq.shared.core import (
 # _parse_ctags_line
 # ---------------------------------------------------------------------------
 
+
 class TestParseCtagsLine:
     """Exercise every branch of _parse_ctags_line."""
 
@@ -37,7 +39,7 @@ class TestParseCtagsLine:
         assert _parse_ctags_line("_000\tfile.py\t/pattern/") is None
 
     def test_basic_valid_line(self) -> None:
-        line = "foo\tbar.py\t/pattern/;\"\tkind:function\tline:42"
+        line = 'foo\tbar.py\t/pattern/;"\tkind:function\tline:42'
         result = _parse_ctags_line(line)
         assert result is not None
         name, file, kind, line_no = result
@@ -48,7 +50,7 @@ class TestParseCtagsLine:
 
     def test_missing_kind_and_line(self) -> None:
         """When parts[3:] has no kind:/line: fields, defaults to '?'."""
-        line = "myFunc\tapp.js\t/pattern/;\"\tscope:Foo"
+        line = 'myFunc\tapp.js\t/pattern/;"\tscope:Foo'
         result = _parse_ctags_line(line)
         assert result is not None
         name, file, kind, line_no = result
@@ -58,14 +60,14 @@ class TestParseCtagsLine:
         assert line_no == "?"
 
     def test_kind_without_line(self) -> None:
-        line = "hello\tmod.go\t/pattern/;\"\tkind:function"
+        line = 'hello\tmod.go\t/pattern/;"\tkind:function'
         result = _parse_ctags_line(line)
         assert result is not None
         assert result[2] == "function"
         assert result[3] == "?"
 
     def test_line_without_kind(self) -> None:
-        line = "greet\tmod.rs\t/pattern/;\"\tline:7"
+        line = 'greet\tmod.rs\t/pattern/;"\tline:7'
         result = _parse_ctags_line(line)
         assert result is not None
         assert result[2] == "?"
@@ -73,7 +75,7 @@ class TestParseCtagsLine:
 
     def test_name_with_underscore_prefix_is_valid(self) -> None:
         """Names like '_init' have alpha chars and should pass."""
-        line = "_init\tlib.py\t/pattern/;\"\tkind:function\tline:1"
+        line = '_init\tlib.py\t/pattern/;"\tkind:function\tline:1'
         result = _parse_ctags_line(line)
         assert result is not None
         assert result[0] == "_init"
@@ -92,6 +94,7 @@ class TestParseCtagsLine:
 # ---------------------------------------------------------------------------
 # ctags_exclude_args
 # ---------------------------------------------------------------------------
+
 
 class TestCtagsExcludeArgs:
     def test_returns_exclude_flags(self) -> None:
@@ -121,6 +124,7 @@ class TestCtagsExcludeArgs:
 # ---------------------------------------------------------------------------
 # run() — timeout
 # ---------------------------------------------------------------------------
+
 
 class TestRunTimeout:
     @patch("codeq.shared.core.subprocess.run")
@@ -157,6 +161,7 @@ class TestRunTimeout:
 # ---------------------------------------------------------------------------
 # lang_of
 # ---------------------------------------------------------------------------
+
 
 class TestLangOf:
     def test_override_wins(self) -> None:
@@ -198,6 +203,7 @@ class TestLangOf:
 # ---------------------------------------------------------------------------
 # die
 # ---------------------------------------------------------------------------
+
 
 class TestDie:
     def test_die_exits_with_code(self) -> None:

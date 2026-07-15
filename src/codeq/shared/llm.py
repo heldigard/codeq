@@ -31,9 +31,7 @@ _OLLAMA_SUMMARY_PREFIX = (
     "# [ollama-summary: {model} (local); this call {lat}s (repeats ~0.1s via"
     " cache); VERIFY before reasoning — small model, may summarize imprecisely]"
 )
-_OLLAMA_DISABLED_PREFIX = (
-    "# [ollama summary unavailable: {reason} — re-run with Ollama up or pass --no-llm to silence]"
-)
+_OLLAMA_DISABLED_PREFIX = "# [ollama summary unavailable: {reason} — re-run with Ollama up or pass --no-llm to silence]"
 
 # Model used for the `summary`/`context`/`relations`/`--summary` paths.
 # Confirmed PRIMARY by the 2026-07-13 round-17 fresh 5-way bench (generate protocol):
@@ -67,7 +65,9 @@ def _safe_generate(client: Any, prompt: str, model: str) -> str | None:
     (transport/timeout/empty). Used so summarize can try primary -> fallback
     without nested try/except inflating the nesting budget."""
     try:
-        res = client.generate(prompt, model=model, temperature=0.2, num_ctx=8192, timeout=30)
+        res = client.generate(
+            prompt, model=model, temperature=0.2, num_ctx=8192, timeout=30
+        )
         return str(res) if res is not None else None
     except Exception:
         return None
@@ -166,7 +166,9 @@ def _summarize_code(
     return (summary, source, cold)
 
 
-def _maybe_emit_summary(file_path: str, name: str, body: str, *, no_llm: bool = False) -> None:
+def _maybe_emit_summary(
+    file_path: str, name: str, body: str, *, no_llm: bool = False
+) -> None:
     """Print a tagged summary line BEFORE the body. Always silent on failure
     — the body is the authoritative source; the summary is just orientation.
     `source` is the actual model tag on success, so the banner reflects the

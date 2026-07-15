@@ -13,20 +13,59 @@ _FIND_SWEEP_FILE_CAP = 10000
 # Reserved control-flow / declaration keywords shared by the regex-based
 # outline sweep (`_regex_outline_methods`) and the body-call-hint extractor
 # (`_body_call_hints`). Single source of truth so they don't drift.
-_RESERVED_KEYWORDS = frozenset({
-    "if", "while", "for", "switch", "catch", "do", "return", "throw",
-    "try", "new", "typeof", "instanceof", "in", "of", "void", "delete",
-    "yield", "await", "async", "function", "class", "const", "let", "var",
-    "import", "export", "case", "default", "continue", "break",
-    # constructors/getters/setters — ctags would have indexed them; don't fabricate.
-    "constructor", "get", "set",
-})
+_RESERVED_KEYWORDS = frozenset(
+    {
+        "if",
+        "while",
+        "for",
+        "switch",
+        "catch",
+        "do",
+        "return",
+        "throw",
+        "try",
+        "new",
+        "typeof",
+        "instanceof",
+        "in",
+        "of",
+        "void",
+        "delete",
+        "yield",
+        "await",
+        "async",
+        "function",
+        "class",
+        "const",
+        "let",
+        "var",
+        "import",
+        "export",
+        "case",
+        "default",
+        "continue",
+        "break",
+        # constructors/getters/setters — ctags would have indexed them; don't fabricate.
+        "constructor",
+        "get",
+        "set",
+    }
+)
 
 EXT_LANG = {
-    "py": "python", "pyi": "python",
-    "js": "javascript", "mjs": "javascript", "cjs": "javascript", "jsx": "javascript",
-    "ts": "typescript", "tsx": "typescript",
-    "go": "go", "rs": "rust", "java": "java", "sh": "bash", "bash": "bash",
+    "py": "python",
+    "pyi": "python",
+    "js": "javascript",
+    "mjs": "javascript",
+    "cjs": "javascript",
+    "jsx": "javascript",
+    "ts": "typescript",
+    "tsx": "typescript",
+    "go": "go",
+    "rs": "rust",
+    "java": "java",
+    "sh": "bash",
+    "bash": "bash",
 }
 
 # ast-grep def/class patterns per language. Metavariables MUST be uppercase
@@ -110,67 +149,117 @@ TYPE_KINDS = {"class", "struct", "interface", "enum", "record", "union"}
 # NOTE: `bin/` `obj/` NOT excluded — often real source in C#/.NET/legacy projects.
 VENDOR_EXCLUDES = [
     # Python
-    ".venv", "venv", "env", "site-packages", ".python_packages",
-    "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", ".nox",
-    ".eggs", ".benchmarks", ".pyre", ".pytype", "htmlcov", ".ipynb_checkpoints",
+    ".venv",
+    "venv",
+    "env",
+    "site-packages",
+    ".python_packages",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".tox",
+    ".nox",
+    ".eggs",
+    ".benchmarks",
+    ".pyre",
+    ".pytype",
+    "htmlcov",
+    ".ipynb_checkpoints",
     # Node / JS / TS
-    "node_modules", "bower_components", "jspm_packages",
-    ".next", ".nuxt", ".svelte-kit", ".remix", ".astro", ".gatsby",
-    ".turbo", ".nx", ".nx-cache", ".parcel-cache", ".ngc-cache", ".vite",
-    ".angular",          # Angular CLI: .angular/cache/, .angular/build-cache/, .angular/service-worker/
-    ".eslintcache", ".stylelintcache", ".cache",
-    ".npm", ".pnpm-store", ".yarn",
-    "coverage", ".nyc_output",
+    "node_modules",
+    "bower_components",
+    "jspm_packages",
+    ".next",
+    ".nuxt",
+    ".svelte-kit",
+    ".remix",
+    ".astro",
+    ".gatsby",
+    ".turbo",
+    ".nx",
+    ".nx-cache",
+    ".parcel-cache",
+    ".ngc-cache",
+    ".vite",
+    ".angular",  # Angular CLI: .angular/cache/, .angular/build-cache/, .angular/service-worker/
+    ".eslintcache",
+    ".stylelintcache",
+    ".cache",
+    ".npm",
+    ".pnpm-store",
+    ".yarn",
+    "coverage",
+    ".nyc_output",
     ".docusaurus",
     "storybook-static",  # Storybook build output (sibling of dist/)
     # Cloud / serverless artifacts (JSON/YAML, never source) — common in node + py + spring
-    "cdk.out",           # AWS CDK synthesized CloudFormation
-    ".aws-sam",          # AWS SAM CLI build artifacts
-    "amplify",           # AWS Amplify generated backend (amplify/backend/, amplify/#current-cloud-backend/)
+    "cdk.out",  # AWS CDK synthesized CloudFormation
+    ".aws-sam",  # AWS SAM CLI build artifacts
+    "amplify",  # AWS Amplify generated backend (amplify/backend/, amplify/#current-cloud-backend/)
     # React Native / Expo (Node/TS mobile)
-    ".expo", ".expo-shared", ".metro",
+    ".expo",
+    ".expo-shared",
+    ".metro",
     # Python offline wheel cache
     "wheelhouse",
     # Generic build / output
-    "dist", "build", "out", "target", "dist-electron",
-    ".serverless", ".vercel", "tmp", "temp",
+    "dist",
+    "build",
+    "out",
+    "target",
+    "dist-electron",
+    ".serverless",
+    ".vercel",
+    "tmp",
+    "temp",
     # Agent harness / memory noise (project facts, transcripts, and backups are
     # not source code and should not steer symbol lookup unless grepped directly).
-    ".memory-bank", "memory-bank", ".claude", ".codex", "file-history",
+    ".memory-bank",
+    "memory-bank",
+    ".claude",
+    ".codex",
+    "file-history",
     # JVM
-    ".gradle", ".mvn",
+    ".gradle",
+    ".mvn",
     # Rust / Go
     # (target already above; vendor/ intentionally NOT excluded)
     # VCS / IDE / editors
-    ".git", ".hg", ".svn",
-    ".idea", ".vscode", ".vs", ".history",
+    ".git",
+    ".hg",
+    ".svn",
+    ".idea",
+    ".vscode",
+    ".vs",
+    ".history",
     # LSP server workspaces (indexes, never source) — Java/Scala/Go/Rust/TS
-    ".jdtls-data",       # Eclipse JDT LS (nvim/helix/emacs) — common in Spring Boot
-    ".metals",           # Scala Metals
-    ".gopls",            # Go gopls
-    ".rust-analyzer",    # Rust analyzer
-    ".tsserver",         # TypeScript standalone server
+    ".jdtls-data",  # Eclipse JDT LS (nvim/helix/emacs) — common in Spring Boot
+    ".metals",  # Scala Metals
+    ".gopls",  # Go gopls
+    ".rust-analyzer",  # Rust analyzer
+    ".tsserver",  # TypeScript standalone server
     # AI coding-assistant caches (prompts, embeddings, snapshots — pollute refs)
-    ".kilocode",         # Kilo Code extension
-    ".cursor",           # Cursor editor
-    ".continue",         # Continue.dev extension
-    ".trae",             # Trae AI editor
-    ".windsurf",         # Windsurf / Cascade
-    ".cline",            # Cline extension
-    ".roo",              # Roo Code extension
-    ".cody",             # Sourcegraph Cody
-    ".augment",          # Augment Code
-    ".aider*",           # Aider (Aider.chat) — covers .aider, .aider.input.history, .aider.chat.history
-    ".codebuddy",        # Codebuddy IDE (JetBrains-style AI coding IDE)
+    ".kilocode",  # Kilo Code extension
+    ".cursor",  # Cursor editor
+    ".continue",  # Continue.dev extension
+    ".trae",  # Trae AI editor
+    ".windsurf",  # Windsurf / Cascade
+    ".cline",  # Cline extension
+    ".roo",  # Roo Code extension
+    ".cody",  # Sourcegraph Cody
+    ".augment",  # Augment Code
+    ".aider*",  # Aider (Aider.chat) — covers .aider, .aider.input.history, .aider.chat.history
+    ".codebuddy",  # Codebuddy IDE (JetBrains-style AI coding IDE)
     # Browser automation / MCP server caches (snapshots, profiles, traces)
-    ".playwright-mcp",   # Playwright MCP server (Microsoft official)
+    ".playwright-mcp",  # Playwright MCP server (Microsoft official)
     ".chrome-devtools-mcp",  # Chrome DevTools MCP
-    ".puppeteer-mcp",    # Puppeteer MCP variants
+    ".puppeteer-mcp",  # Puppeteer MCP variants
     ".browserbase-mcp",  # Browserbase MCP
-    ".firecrawl-mcp",    # Firecrawl MCP local cache
-    ".agent-browser",    # agent-browser CLI snapshot/trace cache
-    ".puppeteer",        # Puppeteer default cache
-    ".playwright",       # Playwright core (older versions, project-local cache)
+    ".firecrawl-mcp",  # Firecrawl MCP local cache
+    ".agent-browser",  # agent-browser CLI snapshot/trace cache
+    ".puppeteer",  # Puppeteer default cache
+    ".playwright",  # Playwright core (older versions, project-local cache)
 ]
 
 # ctags --exclude supports shell wildcards; grep --exclude-dir does NOT. So we apply
@@ -198,7 +287,9 @@ IMPORT_PATTERNS = {
         re.compile(r"^\s*import\s+.*?\s+from\s+['\"]([^'\"]+)['\"]"),
         re.compile(r"^\s*import\s+['\"]([^'\"]+)['\"]"),
         # Re-exports: `export ... from 'x'` and `export * from 'x'`
-        re.compile(r"^\s*export\s+(?:\{[^}]*\}|\*(?:\s+as\s+\w+)?)\s+from\s+['\"]([^'\"]+)['\"]"),
+        re.compile(
+            r"^\s*export\s+(?:\{[^}]*\}|\*(?:\s+as\s+\w+)?)\s+from\s+['\"]([^'\"]+)['\"]"
+        ),
         # CommonJS require
         re.compile(r"""^\s*const\s+\w+\s*=\s*require\(\s*['"]([^'"]+)['"]\s*\)"""),
         # Dynamic import
@@ -208,7 +299,9 @@ IMPORT_PATTERNS = {
         re.compile(r"^\s*import\s+(?:type\s+)?.*?\s+from\s+['\"]([^'\"]+)['\"]"),
         re.compile(r"^\s*import\s+['\"]([^'\"]+)['\"]"),
         # Re-exports: `export ... from 'x'` and `export * from 'x'`
-        re.compile(r"^\s*export\s+(?:\{[^}]*\}|\*(?:\s+as\s+\w+)?)\s+from\s+['\"]([^'\"]+)['\"]"),
+        re.compile(
+            r"^\s*export\s+(?:\{[^}]*\}|\*(?:\s+as\s+\w+)?)\s+from\s+['\"]([^'\"]+)['\"]"
+        ),
         # TS-CommonJS: `import x = require('...')` and `import x = pkg.foo`
         re.compile(r"^\s*import\s+\w+\s*=\s*require\(\s*['\"]([^'\"]+)['\"]\s*\)"),
         re.compile(r"^\s*const\s+\w+\s*=\s*require\(\s*['\"]([^'\"]+)['\"]\s*\)"),

@@ -34,7 +34,9 @@ export class X {
         (d / "caller.ts").write_text(
             "import { X } from './mod';\nexport function run(x: X, s: string) {\n  return x.doWork(s);\n}\n"
         )
-        (d / "host.ts").write_text("import { X } from './mod';\nexport const componentType = X;\n")
+        (d / "host.ts").write_text(
+            "import { X } from './mod';\nexport const componentType = X;\n"
+        )
 
         # `summary --no-llm` → stdout empty (the LLM isn't needed for the body),
         # stderr has the disabled-prefix note.
@@ -65,7 +67,9 @@ export class X {
             env=env_no_llm,
             check=False,
         )
-        assert r.returncode == 0, f"body --summary --no-llm should exit 0: rc={r.returncode}"
+        assert r.returncode == 0, (
+            f"body --summary --no-llm should exit 0: rc={r.returncode}"
+        )
         assert "doWork(input: string)" in r.stdout, (
             f"body --summary --no-llm lost the body: {r.stdout!r}"
         )
@@ -130,11 +134,12 @@ export class X {
         # The symbol's OWN name must NOT leak as a self-call hint (the regex
         # would otherwise match the signature line `doWork(...)`). Bug fixed
         # 2026-06-28 via the exclude_name param on _body_call_hints.
-        hint_block = r.stdout.split("=== Internal call hints", 1)[-1].split("=== External refs", 1)[
-            0
-        ]
-        assert "\n# - doWork" not in hint_block and "doWork()" not in hint_block.replace(
-            "this.svc.process", ""
+        hint_block = r.stdout.split("=== Internal call hints", 1)[-1].split(
+            "=== External refs", 1
+        )[0]
+        assert (
+            "\n# - doWork" not in hint_block
+            and "doWork()" not in hint_block.replace("this.svc.process", "")
         ), f"relations leaked the symbol's own name as a call hint: {hint_block!r}"
 
 
@@ -158,7 +163,9 @@ def test_codeq_summary_and_context_live() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp) / "live"
         d.mkdir()
-        (d / "greet.py").write_text("def greet(name: str) -> str:\n    return f'Hello, {name}!'\n")
+        (d / "greet.py").write_text(
+            "def greet(name: str) -> str:\n    return f'Hello, {name}!'\n"
+        )
         r = subprocess.run(
             ["codeq", "summary", "greet", str(d / "greet.py")],
             capture_output=True,
@@ -167,10 +174,14 @@ def test_codeq_summary_and_context_live() -> None:
         )
         if r.returncode != 0:
             return  # model returned empty / transport flake — skip, not a hard fail
-        assert "ollama-summary:" in r.stdout, f"live summary missing banner: {r.stdout!r}"
+        assert "ollama-summary:" in r.stdout, (
+            f"live summary missing banner: {r.stdout!r}"
+        )
         # The summary line should NOT contain a code block fence or the body itself
         # (proves we're returning a short prose description, not the source).
-        assert "def greet" not in r.stdout, f"live summary leaked the body: {r.stdout!r}"
+        assert "def greet" not in r.stdout, (
+            f"live summary leaked the body: {r.stdout!r}"
+        )
 
 
 def test_codeq_relations_no_llm_sections() -> None:
@@ -218,13 +229,17 @@ def test_codeq_relations_no_llm_sections() -> None:
             f"relations --no-llm should succeed: rc={r.returncode} stderr={r.stderr!r}"
         )
         out = r.stdout
-        assert "[codeq relations" in out, f"relations missing the provenance header: {out!r}"
+        assert "[codeq relations" in out, (
+            f"relations missing the provenance header: {out!r}"
+        )
         assert "Signature" in out, f"relations missing Signature section: {out!r}"
         # Both internal callees should surface as call hints (regex over body).
         assert "helper()" in out, f"relations missing helper() call hint: {out!r}"
         assert "util()" in out, f"relations missing util() call hint: {out!r}"
         # The AST-exact refs half should find the caller.py reference.
-        assert "caller.py" in out, f"relations missing the external ref from caller.py: {out!r}"
+        assert "caller.py" in out, (
+            f"relations missing the external ref from caller.py: {out!r}"
+        )
         # relations must NOT embed the full body (that's `context`'s job).
         assert "return b" not in out, (
             f"relations leaked the body (should be cheaper than context): {out!r}"

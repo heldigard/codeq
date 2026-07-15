@@ -1,6 +1,7 @@
 """Unit tests for codeq.shared.extraction — covers the low-coverage helpers
 (_astgrep_body, _py_body, _brace_collect, _sig_from_raw, _class_body,
 _lombok_synthetic_body) with mocked externals (no real binaries needed)."""
+
 from __future__ import annotations
 
 import json
@@ -21,6 +22,7 @@ from codeq.shared.extraction import (
 # ---------------------------------------------------------------------------
 # _astgrep_body
 # ---------------------------------------------------------------------------
+
 
 class TestAstgrepBody:
     """Mock run() to exercise all branches of _astgrep_body."""
@@ -81,6 +83,7 @@ class TestAstgrepBody:
 # ---------------------------------------------------------------------------
 # _py_body
 # ---------------------------------------------------------------------------
+
 
 class TestPyBody:
     """Create real temp .py files and test AST-based extraction."""
@@ -165,6 +168,7 @@ class TestPyBody:
 # _brace_collect
 # ---------------------------------------------------------------------------
 
+
 class TestBraceCollect:
     """Test brace counting on in-memory line lists (no I/O)."""
 
@@ -212,10 +216,10 @@ class TestBraceCollect:
 
     def test_brace_in_string_ignored(self) -> None:
         lines = [
-            'function f() {',
+            "function f() {",
             '  console.log("}");',
-            '  return 1;',
-            '}',
+            "  return 1;",
+            "}",
         ]
         result = _brace_collect(lines, start=1)
         assert result is not None
@@ -248,6 +252,7 @@ class TestBraceCollect:
 # ---------------------------------------------------------------------------
 # _sig_from_raw
 # ---------------------------------------------------------------------------
+
 
 class TestSigFromRaw:
     """Test signature-extraction logic for Python and brace-langs."""
@@ -301,6 +306,7 @@ class TestSigFromRaw:
 # _class_body
 # ---------------------------------------------------------------------------
 
+
 class TestClassBody:
     """Test _class_body with mocked sub-functions."""
 
@@ -353,6 +359,7 @@ class TestClassBody:
 # ---------------------------------------------------------------------------
 # _lombok_synthetic_body
 # ---------------------------------------------------------------------------
+
 
 class TestLombokSyntheticBody:
     """Test _lombok_synthetic_body with mocked detect_lombok_members."""
