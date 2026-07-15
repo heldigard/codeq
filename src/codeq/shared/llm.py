@@ -20,7 +20,7 @@ if _HARNESS_SCRIPTS.is_dir():
     sys.path.insert(0, str(_HARNESS_SCRIPTS))
 
 # ---------------------------------------------------------------------------
-# Ollama enrichment layer (local 4B model). Produces SHORTER & more digestable
+# Ollama enrichment layer (local 9B summary model). Produces SHORTER & more digestable
 # representations of code facts so the large LLM at the agent loop can orient
 # faster. Does NOT do reasoning — that's the large LLM's job; we only deliver
 # better-compressed facts, tagged so the consumer can tell they came from a
@@ -31,7 +31,9 @@ _OLLAMA_SUMMARY_PREFIX = (
     "# [ollama-summary: {model} (local); this call {lat}s (repeats ~0.1s via"
     " cache); VERIFY before reasoning — small model, may summarize imprecisely]"
 )
-_OLLAMA_DISABLED_PREFIX = "# [ollama summary unavailable: {reason} — re-run with Ollama up or pass --no-llm to silence]"
+_OLLAMA_DISABLED_PREFIX = (
+    "# [ollama summary unavailable: {reason} — re-run with Ollama up or pass --no-llm to silence]"
+)
 
 # Model used for the `summary`/`context`/`relations`/`--summary` paths.
 # Confirmed PRIMARY by the 2026-07-13 round-17 fresh 5-way bench (generate protocol):
@@ -65,9 +67,7 @@ def _safe_generate(client: Any, prompt: str, model: str) -> str | None:
     (transport/timeout/empty). Used so summarize can try primary -> fallback
     without nested try/except inflating the nesting budget."""
     try:
-        res = client.generate(
-            prompt, model=model, temperature=0.2, num_ctx=8192, timeout=30
-        )
+        res = client.generate(prompt, model=model, temperature=0.2, num_ctx=8192, timeout=30)
         return str(res) if res is not None else None
     except Exception:
         return None
@@ -125,8 +125,11 @@ def _summarize_code(
     ollama_client: Any = importlib.import_module("ollama_client")
     import time as _time
 
-    # Truncate to keep the small model focused on the signature + first ~2.5KB.
-    BODY_BUDGET = 2500
+    # Truncate to keep the model focused on the signature + first ~6KB. The
+    # summary model is a 9B (TeichAI/Qwen3.5-9B-Fable; was tuned for a 4B at
+    # 2.5KB) — a 9B holds more context without losing focus, and 6KB still
+    # fits num_ctx=8192 with signature + prompt margin.
+    BODY_BUDGET = 6000
     is_truncated = len(body) > BODY_BUDGET
     body_view = body[:BODY_BUDGET]
     truncation_note = (
@@ -166,9 +169,7 @@ def _summarize_code(
     return (summary, source, cold)
 
 
-def _maybe_emit_summary(
-    file_path: str, name: str, body: str, *, no_llm: bool = False
-) -> None:
+def _maybe_emit_summary(file_path: str, name: str, body: str, *, no_llm: bool = False) -> None:
     """Print a tagged summary line BEFORE the body. Always silent on failure
     — the body is the authoritative source; the summary is just orientation.
     `source` is the actual model tag on success, so the banner reflects the
