@@ -114,12 +114,8 @@ def _rename_json(args: argparse.Namespace) -> int:
 
 def _tags_json(args: argparse.Namespace) -> int:
     from pathlib import Path
-    from codeq.features.tags.command import (
-        CTAGS,
-        VENDOR_EXCLUDES,
-        ctags_exclude_args,
-        run,
-    )
+    from codeq.shared.config import CTAGS, VENDOR_EXCLUDES
+    from codeq.shared.core import ctags_exclude_args, run
 
     out_file = args.output or str(Path(args.path) / ".tags")
     cmd = [CTAGS, "-R", "--fields=+nKz", "-f", out_file]
