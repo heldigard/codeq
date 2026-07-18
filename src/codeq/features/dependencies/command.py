@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from codeq.features.dependencies.parsing import re_deps
-from codeq.shared.config import IMPORT_PATTERNS
+from codeq.shared.config import IMPORT_PATTERNS, LANG_RDEPS_INCLUDES
 from codeq.shared.core import die, lang_of
 from codeq.shared.search import search_lexical
 
@@ -166,30 +166,8 @@ def _rdep_rows_for_key(
     return rows
 
 
-# grep `--include` globs per language for `rdeps`. Module-level so the
-# multi-entry lists don't trip deep-indent continuation inside cmd_rdeps.
-_INCLUDES_BY_LANG: dict[str, list[str]] = {
-    "python": ["--include=*.py"],
-    "javascript": [
-        "--include=*.js",
-        "--include=*.mjs",
-        "--include=*.cjs",
-        "--include=*.jsx",
-        "--include=*.ts",
-        "--include=*.tsx",
-    ],
-    "typescript": [
-        "--include=*.ts",
-        "--include=*.tsx",
-        "--include=*.js",
-        "--include=*.mjs",
-        "--include=*.jsx",
-    ],
-    "go": ["--include=*.go"],
-    "rust": ["--include=*.rs"],
-    "java": ["--include=*.java"],
-    "bash": ["--include=*.sh", "--include=*.bash"],
-}
+# rdeps include globs live in shared.config.LANG_RDEPS_INCLUDES (JS/TS
+# cross-search mixed projects; single source with refs LANG_INCLUDES).
 
 
 def get_rdeps(
@@ -214,7 +192,7 @@ def get_rdeps(
         except SystemExit:
             return []
     keys = _rdep_module_keys(file, path, resolved_lang)
-    includes = _INCLUDES_BY_LANG.get(resolved_lang, [])
+    includes = LANG_RDEPS_INCLUDES.get(resolved_lang, [])
     target = f.resolve()
     seen: set[tuple[str, str]] = set()
     rows: list[tuple[str, int, str]] = []

@@ -27,13 +27,8 @@ import argparse
 import re
 import sys
 
-from codeq.shared.config import ASTGREP
+from codeq.shared.config import ASTGREP, RENAME_LANGS
 from codeq.shared.core import die, run
-
-# ast-grep languages codeq rename supports (subset of ast-grep's --lang enum,
-# aligned with codeq's EXT_LANG). Each accepts a bare-identifier pattern and
-# applies it without touching strings / comments (verified 2026-07-04).
-_RENAME_LANGS = frozenset({"python", "javascript", "typescript", "go", "rust", "java"})
 
 # Conservative identifier: letters / digits / underscore, not leading digit.
 # Java also allows `$` (included). Rejecting exotic forms upfront gives a
@@ -104,9 +99,9 @@ def _validate_inputs(old: str, new: str, lang: str) -> None:
         )
     if old == new:
         die("OLD and NEW are identical; nothing to rename.")
-    if lang not in _RENAME_LANGS:
+    if lang not in RENAME_LANGS:
         die(
-            f"rename supports langs {sorted(_RENAME_LANGS)}; got lang={lang!r}. "
+            f"rename supports langs {sorted(RENAME_LANGS)}; got lang={lang!r}. "
             "For other langs, run ast-grep directly."
         )
 

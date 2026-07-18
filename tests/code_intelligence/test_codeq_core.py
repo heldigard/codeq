@@ -73,6 +73,19 @@ def test_codeq_check_java_probe() -> None:
     )
 
 
+def test_codeq_check_bash_probe() -> None:
+    """`codeq check -l bash` must not die with 'no probe for lang'. bash is in
+    EXT_LANG + LANG_INCLUDES; check must stay in lang-parity with them."""
+    result = run(["codeq", "check", "echo $X", "-l", "bash"], check=False)
+    assert "no probe for lang" not in result.stderr, (
+        f"check refused bash even though refs supports it: "
+        f"{result.stdout}{result.stderr}"
+    )
+    assert result.returncode == 0, (
+        f"valid bash pattern should validate cleanly: {result.stdout}{result.stderr}"
+    )
+
+
 def test_codeq_java(fixture_dir: Path) -> None:
     """Java symbol extraction. `outline <Class>` lists members — the supported
     workaround for the codeq Java class-body limitation (body of a class would
@@ -325,10 +338,13 @@ def test_codeq_modular_layout() -> None:
     root = Path(__file__).resolve().parents[2]
     package = root / "src" / "codeq"
     expected_slices = {
+        "capabilities",
         "code_context",
         "dependencies",
+        "doctor",
         "pattern_check",
         "references",
+        "rename",
         "repo_map",
         "symbol_body",
         "symbol_search",

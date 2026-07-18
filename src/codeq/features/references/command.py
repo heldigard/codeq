@@ -4,23 +4,8 @@ import argparse
 import re
 import sys
 
+from codeq.shared.config import LANG_INCLUDES
 from codeq.shared.search import search_lexical, search_py_refs
-
-# Extension globs per language for the `refs` search.
-_LANG_INCLUDES: dict[str, list[str]] = {
-    "python": ["--include=*.py"],
-    "javascript": [
-        "--include=*.js",
-        "--include=*.mjs",
-        "--include=*.cjs",
-        "--include=*.jsx",
-    ],
-    "typescript": ["--include=*.ts", "--include=*.tsx"],
-    "go": ["--include=*.go"],
-    "rust": ["--include=*.rs"],
-    "java": ["--include=*.java"],
-    "bash": ["--include=*.sh", "--include=*.bash"],
-}
 
 
 def _def_filter_re(lang: str, name: str) -> "re.Pattern[str]":
@@ -83,7 +68,7 @@ def _refs_lines(name: str, path: str, lang: str) -> list[str]:
     path until an optional tree-sitter integration lands."""
     if lang == "python":
         return search_py_refs(name, path)
-    includes = _LANG_INCLUDES.get(lang, [])
+    includes = LANG_INCLUDES.get(lang, [])
     return search_lexical(name, path, includes)
 
 

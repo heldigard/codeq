@@ -45,7 +45,7 @@ prefer a cheaper structured path.
 - `ctags` on `PATH` (Universal Ctags; required)
 - `ast-grep` on `PATH` (required)
 - Optional: `ripgrep` on `PATH` — speeds up `refs`/`rdeps`; a built-in pure-Python walker is used otherwise. codeq NEVER depends on the system `grep`, whose behavior varies across GNU/ugrep/busybox/BSD.
-- Optional: local Ollama plus `ollama_client.py` for `summary`, `context`, `relations`, and `--summary`. Default summary model is `Qwythos-9B` (6.8GB); override with `CODEQ_SUMMARY_MODEL`. Falls back to `batiai/gemma4-e4b:q4` (5.3GB) on VRAM-tight hosts; override with `CODEQ_FALLBACK_MODEL`.
+- Optional: local Ollama plus `ollama_client.py` for `summary`, `context`, `relations`, and `--summary`. Default summary model is `TeichAI/Qwen3.5-9B-Fable-5-v1` (codeq_sum #1, ~6.5GB); override with `CODEQ_SUMMARY_MODEL`. Falls back to `Qwythos-9B` (~6.8GB) on VRAM contention; override with `CODEQ_FALLBACK_MODEL`.
 
 Run `codeq doctor` to check what is installed (`codeq doctor --install` installs missing binaries via cargo/npm/pipx where possible).
 

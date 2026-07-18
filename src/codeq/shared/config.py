@@ -68,6 +68,49 @@ EXT_LANG = {
     "bash": "bash",
 }
 
+# Canonical language names (values of EXT_LANG). Single set for parity tests
+# and feature tables — when adding a language, extend EXT_LANG + every table
+# that lang_matrix_test asserts.
+SUPPORTED_LANGS: frozenset[str] = frozenset(EXT_LANG.values())
+
+
+def _lang_includes(*exts: str) -> list[str]:
+    """Build ripgrep/walker --include globs for the given extensions."""
+    return [f"--include=*.{ext}" for ext in exts]
+
+
+# Exact-language file globs for `refs` (and similar). One source of truth —
+# do not re-declare per-feature include tables.
+LANG_INCLUDES: dict[str, list[str]] = {
+    "python": _lang_includes("py"),
+    "javascript": _lang_includes("js", "mjs", "cjs", "jsx"),
+    "typescript": _lang_includes("ts", "tsx"),
+    "go": _lang_includes("go"),
+    "rust": _lang_includes("rs"),
+    "java": _lang_includes("java"),
+    "bash": _lang_includes("sh", "bash"),
+}
+
+# `rdeps` searches a slightly wider set for JS/TS so mixed projects still
+# find importers across the .js ↔ .ts boundary.
+LANG_RDEPS_INCLUDES: dict[str, list[str]] = {
+    lang: list(includes) for lang, includes in LANG_INCLUDES.items()
+}
+LANG_RDEPS_INCLUDES["javascript"] = [
+    *LANG_INCLUDES["javascript"],
+    *LANG_INCLUDES["typescript"],
+]
+LANG_RDEPS_INCLUDES["typescript"] = [
+    *LANG_INCLUDES["typescript"],
+    *LANG_INCLUDES["javascript"],
+]
+
+# Languages with ast-grep body/rename support (bash is ctags/refs-only).
+STRUCTURAL_LANGS: frozenset[str] = frozenset(
+    {"python", "javascript", "typescript", "go", "rust", "java"}
+)
+RENAME_LANGS: frozenset[str] = STRUCTURAL_LANGS
+
 # ast-grep def/class patterns per language. Metavariables MUST be uppercase
 # (lowercase multi-metavars do not bind). Tried in order; first match wins.
 BODY_PATTERNS: dict[str, list[str]] = {
@@ -314,6 +357,9 @@ IMPORT_PATTERNS = {
 }
 
 # Minimal valid probe content for `check` (pattern parse happens before search).
+# Keep keys in parity with EXT_LANG languages that ast-grep can pattern-check
+# (python/js/ts/go/rust/java/bash). Adding a lang to EXT_LANG without a PROBE
+# entry makes `codeq check -l <lang>` die with "no probe for lang".
 PROBE: dict[str, str] = {
     "python": "pass\n",
     "javascript": "let x = 1;\n",
@@ -325,4 +371,7 @@ PROBE: dict[str, str] = {
     # for pattern validation (probe is syntactic context, not a target). Parity:
     # rename + body extraction already support java.
     "java": "class _P {}\n",
+    # Bash: ast-grep --lang bash; refs/deps already support bash. Probe is a
+    # trivial assignment so pattern parse has a valid syntactic context.
+    "bash": "x=1\n",
 }
