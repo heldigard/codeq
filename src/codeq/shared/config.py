@@ -336,7 +336,9 @@ IMPORT_PATTERNS = {
         re.compile(r"^\s*import\s+.*?\s+from\s+['\"]([^'\"]+)['\"]"),
         re.compile(r"^\s*import\s+['\"]([^'\"]+)['\"]"),
         # Re-exports: `export ... from 'x'` and `export * from 'x'`
-        re.compile(r"^\s*export\s+(?:\{[^}]*\}|\*(?:\s+as\s+\w+)?)\s+from\s+['\"]([^'\"]+)['\"]"),
+        re.compile(
+            r"^\s*export\s+(?:\{[^}]*\}|\*(?:\s+as\s+\w+)?)\s+from\s+['\"]([^'\"]+)['\"]"
+        ),
         # CommonJS require
         re.compile(r"""^\s*const\s+\w+\s*=\s*require\(\s*['"]([^'"]+)['"]\s*\)"""),
         # Dynamic import
@@ -346,7 +348,9 @@ IMPORT_PATTERNS = {
         re.compile(r"^\s*import\s+(?:type\s+)?.*?\s+from\s+['\"]([^'\"]+)['\"]"),
         re.compile(r"^\s*import\s+['\"]([^'\"]+)['\"]"),
         # Re-exports: `export ... from 'x'` and `export * from 'x'`
-        re.compile(r"^\s*export\s+(?:\{[^}]*\}|\*(?:\s+as\s+\w+)?)\s+from\s+['\"]([^'\"]+)['\"]"),
+        re.compile(
+            r"^\s*export\s+(?:\{[^}]*\}|\*(?:\s+as\s+\w+)?)\s+from\s+['\"]([^'\"]+)['\"]"
+        ),
         # TS-CommonJS: `import x = require('...')` and `import x = pkg.foo`
         re.compile(r"^\s*import\s+\w+\s*=\s*require\(\s*['\"]([^'\"]+)['\"]\s*\)"),
         re.compile(r"^\s*const\s+\w+\s*=\s*require\(\s*['\"]([^'\"]+)['\"]\s*\)"),
