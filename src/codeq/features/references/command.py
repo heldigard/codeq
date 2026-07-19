@@ -72,6 +72,17 @@ def _refs_lines(name: str, path: str, lang: str) -> list[str]:
     return search_lexical(name, path, includes)
 
 
+def _ts_filter_refs(name: str, lines: list[str], lang: str) -> list[str]:
+    """Drop refs whose hit is inside a comment / string literal via tree-sitter.
+
+    Thin lazy wrapper so the optional tree-sitter dep is imported only when
+    refs actually run for a brace-lang. Graceful no-op when tree-sitter is
+    absent or the language has no comment/string table (returns LINES as-is)."""
+    from codeq.shared.tree_sitter_extract import ts_filter_refs
+
+    return ts_filter_refs(name, lines, lang)
+
+
 def get_refs(
     name: str,
     path: str,
@@ -88,6 +99,7 @@ def get_refs(
     lines = _refs_lines(name, path, lang or "")
     if not lines:
         return []
+    lines = _ts_filter_refs(name, lines, lang or "")
     def_re = _def_filter_re(lang or "", name)
     result: list[str] = []
     for line in lines:

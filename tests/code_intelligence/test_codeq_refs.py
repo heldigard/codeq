@@ -11,6 +11,7 @@ from pathlib import Path
 
 from codeq.features.references.command import get_refs
 from codeq.shared.search import search_py_refs
+from codeq.shared.tree_sitter_extract import ts_available as _ts_available
 
 
 def _write(root: Path, name: str, body: str) -> Path:
@@ -122,17 +123,85 @@ def test_get_refs_uses_ast_path_for_python() -> None:
 
 
 def test_get_refs_lexical_for_non_python() -> None:
-    """Non-python langs keep the lexical path (AST only covers python). A
-    string literal CAN match under lexical — proof the dispatch is lexical,
-    not AST. This test pins the lang-dispatch contract so it doesn't drift."""
+    """Non-python langs use the lexical path (AST only covers python), then a
+    tree-sitter filter drops hits inside comments/strings when tree-sitter is
+    available. The real call appears; a bare string literal does not.
+
+    Pins the lang-dispatch contract: python → AST (string never matches);
+    brace-langs → lexical (then ts-filtered). A call `foo()` must appear so
+    the dispatch is provably wired; the filtered-out `'foo'` proves the
+    ts-filter layer sits on top of lexical (without it, lexical would keep
+    the string)."""
+    if not _ts_available():
+        return  # ts is an optional dep; skip the filter assertion when absent
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        (root / "a.js").write_text("function foo() {}\n'foo';\n")
+        # `const r = foo()` survives the JS def-filter (a bare top-level
+        # `foo();` is regex-collapsed into a declaration — known limitation
+        # of the depth-unaware def_re, not in scope here).
+        (root / "a.js").write_text("function foo() {}\nconst r = foo();\n'foo';\n")
         rows = get_refs("foo", str(root), lang="javascript")
-        # The string-literal line is present under lexical search; it would
-        # be ABSENT under the python AST path (which never matches strings).
-        # Its presence proves the non-python dispatch goes through lexical.
-        assert any("'foo'" in r for r in rows), rows
+        assert any("const r = foo()" in r for r in rows), f"call missing: {rows}"
+        assert not any("'foo'" in r for r in rows), (
+            f"string literal not filtered: {rows}"
+        )
+
+
+def test_ts_filter_drops_comment_and_string_refs() -> None:
+    """A symbol mentioned in a comment AND a string AND a real call: refs must
+    return only the call line. This is the brace-lang analog of
+    `test_py_refs_excludes_comments_and_strings`, closed via tree-sitter
+    instead of the `ast` module."""
+    if not _ts_available():
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "a.ts").write_text(
+            "// call foo here\n"
+            "const note = 'foo';\n"
+            "function foo() { return 1; }\n"
+            "const result = foo();\n"
+        )
+        rows = get_refs("foo", str(root), lang="typescript")
+        # def line filtered by def_re; comment + string filtered by tree-sitter.
+        assert any("foo()" in r for r in rows), f"call missing: {rows}"
+        assert not any("call foo here" in r for r in rows), f"comment leaked: {rows}"
+        assert not any("note =" in r for r in rows), f"string leaked: {rows}"
+        assert not any("function foo" in r for r in rows), f"def leaked: {rows}"
+
+
+def test_ts_filter_preserves_member_access() -> None:
+    """`obj.foo` (member access) is real code, not a string or comment — it
+    must survive the tree-sitter filter. This is the key safety property of
+    the filter approach (vs reimplementing refs from tree-sitter, which would
+    risk losing member-access true positives across grammars)."""
+    if not _ts_available():
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "a.ts").write_text("function foo() { return 1; }\nobj.foo;\n")
+        rows = get_refs("foo", str(root), lang="typescript")
+        assert any("obj.foo" in r for r in rows), f"member access lost: {rows}"
+
+
+def test_ts_filter_works_without_explicit_lang() -> None:
+    """The `refs` CLI path passes lang=None for a mixed tree. The filter must
+    infer the language per file from its extension (`.ts` → typescript) and
+    still drop comment/string hits. Regression: the first implementation gated
+    on the caller's lang and silently no-op'd when it was empty, so the CLI
+    returned comment/string matches while unit tests (which passed an explicit
+    lang) passed."""
+    if not _ts_available():
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "a.ts").write_text(
+            "// see foo\nconst label = 'foo';\nfunction foo() {}\nconst r = foo();\n"
+        )
+        rows = get_refs("foo", str(root))  # lang defaults to None
+        assert any("foo();" in r for r in rows), f"call missing: {rows}"
+        assert not any("see foo" in r for r in rows), f"comment leaked: {rows}"
+        assert not any("label =" in r for r in rows), f"string leaked: {rows}"
 
 
 def test_bash_refs_filters_bare_function_declaration() -> None:

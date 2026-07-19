@@ -22,9 +22,13 @@ Usage:
 
 from __future__ import annotations
 
+import bisect
 import importlib.util
+import re
 from pathlib import Path
 from typing import Any, Iterator, cast
+
+from codeq.shared.config import EXT_LANG
 
 # tree-sitter node types that DECLARE a function/method body, per language.
 # Verified against tree-sitter-language-pack 1.12 (2026-07-04) by probing each
@@ -165,3 +169,140 @@ def _declared_name(node: Any) -> str | None:
             text = cast(bytes, child.text)
             return text.decode("utf-8", "replace")
     return None
+
+
+# ---------------------------------------------------------------------------
+# Reference filtering — drop lexical hits inside comments / string literals
+# ---------------------------------------------------------------------------
+
+# tree-sitter node types that are COMMENT or STRING CONTAINERS per language.
+# Verified empirically against tree-sitter-language-pack 1.12.5 (2026-07-18)
+# by probing each grammar with NAME placed in line/block comment, string, and
+# template literals. Only the CONTAINER node is listed: its byte range covers
+# the match, so child fragment nodes (string_fragment / string_content / ...)
+# need not be enumerated.
+_COMMENT_STRING_NODE_TYPES: dict[str, frozenset[str]] = {
+    "javascript": frozenset({"comment", "string", "template_string"}),
+    "typescript": frozenset({"comment", "string", "template_string"}),
+    "java": frozenset({"line_comment", "block_comment", "string_literal"}),
+    "go": frozenset(
+        {"comment", "interpreted_string_literal", "raw_string_literal", "rune_literal"}
+    ),
+    "rust": frozenset(
+        {
+            "line_comment",
+            "block_comment",
+            "string_literal",
+            "raw_string_literal",
+            "char_literal",
+        }
+    ),
+}
+
+
+def ts_filter_refs(name: str, ref_lines: list[str], lang: str) -> list[str]:
+    """Drop REF_LINES whose symbol hit is inside a comment or string literal.
+
+    Groups lines by source file, parses each once with tree-sitter, and keeps a
+    line only when some word-boundary occurrence of NAME on it is NOT inside a
+    comment/string node's byte range. Returns REF_LINES unchanged when
+    tree-sitter is absent, the language has no comment/string table (python
+    uses the AST path already; bash has no tree-sitter integration), or a file
+    fails to read/parse — graceful, never worse than the lexical input.
+
+    Why FILTER (not re-derive) refs from tree-sitter: identifier-vs-property-
+    key classification varies per grammar, and a from-scratch walker risks
+    losing member-access true positives (`obj.foo`). Filtering lexical output
+    can only drop false positives (comment / string mentions), never true ones.
+    """
+    if not ref_lines or not ts_available():
+        return ref_lines
+    name_b = name.encode("utf-8")
+    rx = re.compile(rb"\b" + re.escape(name_b) + rb"\b")
+    cache: dict[str, set[int] | None] = {}
+    out: list[str] = []
+    for rl in ref_lines:
+        m = re.match(r"^(.*?):(\d+):(.*)$", rl)
+        if not m:
+            out.append(rl)
+            continue
+        file, line_no = m.group(1), int(m.group(2))
+        if file not in cache:
+            cache[file] = _code_lines_for(name_b, rx, file, lang)
+        code_lines = cache[file]
+        if code_lines is None or line_no in code_lines:
+            out.append(rl)
+    return out
+
+
+def _code_lines_for(
+    name_b: bytes,
+    rx: re.Pattern[bytes],
+    file: str,
+    lang_hint: str,
+) -> set[int] | None:
+    """1-based line numbers where NAME occurs as real code in FILE, or None
+    when the file cannot be classified so the caller passes its lines through
+    unchanged rather than silently dropping them.
+
+    LANG_HINT is the caller's explicit language (may be "" — the CLI `refs`
+    path passes lang=None for a mixed tree); when empty, the language is
+    inferred from FILE's extension so each hit file is parsed with the
+    matching grammar."""
+    lang = lang_hint or _lang_of_file(file)
+    if lang is None or lang not in _COMMENT_STRING_NODE_TYPES:
+        return None  # python (AST path) / bash / unknown ext → passthrough
+    try:
+        src = Path(file).read_bytes()
+    except OSError:
+        return None
+    parser = _parser_for(lang)
+    if parser is None:
+        return None
+    bad_types = _COMMENT_STRING_NODE_TYPES[lang]
+    tree = parser.parse(src)
+    bad_ranges = _comment_string_ranges(tree.root_node, bad_types)
+    line_starts = _line_starts(src)
+    code_lines: set[int] = set()
+    for m in rx.finditer(src):
+        off = m.start()
+        if any(s <= off < e for s, e in bad_ranges):
+            continue
+        code_lines.add(bisect.bisect_right(line_starts, off))
+    return code_lines
+
+
+def _lang_of_file(file: str) -> str | None:
+    """tree-sitter lang for FILE from its extension, or None when unknown.
+    Used to classify each hit file individually when the caller has no
+    explicit language (the `refs` CLI path passes lang=None for mixed trees)."""
+    ext = Path(file).suffix.lstrip(".")
+    return EXT_LANG.get(ext)
+
+
+def _comment_string_ranges(
+    root: Any, bad_types: frozenset[str]
+) -> list[tuple[int, int]]:
+    """Byte [start, end) ranges of every comment/string node under ROOT.
+    Descends only into non-bad nodes — a string's children are all inside its
+    range, so pruning at the container avoids redundant inner ranges."""
+    ranges: list[tuple[int, int]] = []
+    stack: list[Any] = [root]
+    while stack:
+        n = stack.pop()
+        if n.type in bad_types:
+            ranges.append((n.start_byte, n.end_byte))
+        else:
+            stack.extend(n.children)
+    return ranges
+
+
+def _line_starts(src: bytes) -> list[int]:
+    """Cumulative byte offset of the start of each line (line 1 starts at 0).
+    `bisect_right(starts, offset)` yields the 1-based line number of OFFSET.
+    Iterates bytes directly so a trailing no-newline line is handled correctly."""
+    starts = [0]
+    for i, b in enumerate(src):
+        if b == 0x0A:  # newline
+            starts.append(i + 1)
+    return starts
