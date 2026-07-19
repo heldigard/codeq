@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from codeq.shared.config import CTAGS, _RESERVED_KEYWORDS
+from codeq.shared.config import CTAGS, EXT_LANG, _RESERVED_KEYWORDS
 from codeq.shared.core import _parse_ctags_line, ctags_exclude_args, die, run
 
 # TypeAlias for a ctags-indexed symbol row: (line, kind, name). Using an alias
@@ -229,6 +229,28 @@ class _FreqAccum:
     minified: set[str] = field(default_factory=set)
 
 
+def _freq_names_for(file: str, text: str) -> Counter[str]:
+    """Identifier multiset for one source file.
+
+    Dispatch:
+    - `.py` → stdlib `tokenize` (NAME only; excludes STRING/COMMENT)
+    - brace-langs with tree-sitter → `ts_freq_names` (AST identifiers;
+      skips comment/string subtrees — same precision as tokenize for Python)
+    - else → regex best-effort (identifier-shaped tokens, may include
+      string/comment noise when tree-sitter is absent)
+    """
+    if file.endswith(".py"):
+        return _py_freq_names(text)
+    lang = EXT_LANG.get(Path(file).suffix.lstrip("."))
+    if lang and lang != "python":
+        from codeq.shared.tree_sitter_extract import ts_freq_names
+
+        ts_counts = ts_freq_names(text, lang)
+        if ts_counts is not None:
+            return Counter(ts_counts)
+    return Counter(_FREQ_TOKEN_RE.findall(text))
+
+
 def _freq_for_file(file: str, syms: list[_Sym], acc: _FreqAccum) -> None:
     """Update ACC with one indexed file's contribution. Mutates in place so
     the caller's loop body stays flat (no `if status == ...` branch).
@@ -236,7 +258,8 @@ def _freq_for_file(file: str, syms: list[_Sym], acc: _FreqAccum) -> None:
     - minified / unreadable files contribute no freq (minified ones are
       flagged so the caller drops them).
     - Python files use `_py_freq_names` (tokenize-exact, excludes STRING /
-      COMMENT tokens); other langs use the regex best-effort extractor.
+      COMMENT tokens); brace-langs use tree-sitter when available; otherwise
+      the regex best-effort extractor.
     """
     text, is_minified = _freq_text(file)
     if is_minified:
@@ -245,9 +268,7 @@ def _freq_for_file(file: str, syms: list[_Sym], acc: _FreqAccum) -> None:
     if text is None:
         return
     acc.defs.update(name for _, _, name in syms)
-    acc.freq.update(
-        _py_freq_names(text) if file.endswith(".py") else _FREQ_TOKEN_RE.findall(text)
-    )
+    acc.freq.update(_freq_names_for(file, text))
 
 
 def _freq_pass(per_file: dict[str, list[_Sym]]) -> _FreqAccum:
@@ -294,7 +315,8 @@ def get_repo_map_data(
             "files": [],
         }
     # One frequency pass over the indexed source files (vendor already excluded).
-    # Python files use tokenize-exact counting (excludes STRING/COMMENT tokens);
+    # Python: tokenize-exact (excludes STRING/COMMENT). Brace-langs: tree-sitter
+    # when available (same precision); regex best-effort otherwise.
     # other langs use the regex best-effort extractor.
     acc = _freq_pass(per_file)
     freq, defs, minified = acc.freq, acc.defs, acc.minified

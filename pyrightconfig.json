@@ -1,0 +1,20 @@
+{
+  "include": ["src", "tests"],
+  "exclude": [
+    "**/__pycache__",
+    ".venv",
+    "build",
+    "dist",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".pytest_cache"
+  ],
+  "extraPaths": ["src"],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.11",
+  "pythonPlatform": "Linux",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": true,
+  "reportMissingModuleSource": false
+}

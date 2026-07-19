@@ -377,3 +377,61 @@ def _line_starts(src: bytes) -> list[int]:
         if b == 0x0A:  # newline
             starts.append(i + 1)
     return starts
+
+
+# ---------------------------------------------------------------------------
+# Identifier frequency — map weight for brace-langs (excludes string/comment)
+# ---------------------------------------------------------------------------
+
+# Identifier-shaped node types across brace-lang grammars. Mirrors
+# `_NAME_FIELD_TYPES` plus JS object shorthand and Go package names so map
+# weights count real code identifiers the same way tokenize does for Python.
+_ID_NODE_TYPES = frozenset(
+    {
+        "identifier",
+        "type_identifier",
+        "field_identifier",
+        "property_identifier",
+        "shorthand_property_identifier",
+        "package_identifier",
+    }
+)
+
+
+def ts_freq_names(text: str, lang: str) -> dict[str, int] | None:
+    """Identifier frequency for TEXT in LANG via tree-sitter, or None.
+
+    Walks the parse tree, skips entire comment/string subtrees (using the same
+    `_COMMENT_STRING_NODE_TYPES` table as `ts_filter_refs`), and counts
+    identifier nodes of length ≥ 3. Returns None when tree-sitter is absent,
+    LANG has no comment/string table, or parse setup fails — callers fall back
+    to the regex best-effort extractor.
+
+    Used by `codeq map` so brace-langs get the same string/comment exclusion
+    that Python already has via `tokenize` (a name mentioned 50× in comments
+    must not inflate its reference weight)."""
+    if not ts_available() or lang not in _COMMENT_STRING_NODE_TYPES:
+        return None
+    parser = _parser_for(lang)
+    if parser is None:
+        return None
+    src = text.encode("utf-8", "replace")
+    try:
+        tree = parser.parse(src)
+    except Exception:
+        return None
+    bad = _COMMENT_STRING_NODE_TYPES[lang]
+    counts: dict[str, int] = {}
+    stack: list[Any] = [tree.root_node]
+    while stack:
+        n = stack.pop()
+        if n.type in bad:
+            continue
+        if n.type in _ID_NODE_TYPES:
+            raw = cast(bytes | None, n.text)
+            if raw is not None and len(raw) >= 3:
+                name = raw.decode("utf-8", "replace")
+                counts[name] = counts.get(name, 0) + 1
+            continue
+        stack.extend(n.children)
+    return counts

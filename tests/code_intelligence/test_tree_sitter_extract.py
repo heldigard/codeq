@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from codeq.shared.tree_sitter_extract import ts_available, ts_body
+from codeq.shared.tree_sitter_extract import ts_available, ts_body, ts_freq_names
 
 pytestmark = pytest.mark.skipif(  # noqa: F841 - consumed by pytest collection
     not ts_available(), reason="tree-sitter not installed"
@@ -122,3 +122,23 @@ def test_ts_body_unsupported_lang_returns_none() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         f = _write(tmp, "a.txt", "hello\n")
         assert ts_body("foo", str(f), "brainfuck") is None
+
+
+def test_ts_freq_names_excludes_comment_and_string() -> None:
+    """Map-weight source: comments/strings must not contribute identifier
+    counts. Real code identifiers still accumulate."""
+    src = (
+        "// widget widget\n"
+        "function helper() { return 1; }\n"
+        "helper();\nhelper();\n"
+        'const s = "widget widget";\n'
+    )
+    counts = ts_freq_names(src, "javascript")
+    assert counts is not None
+    assert counts.get("widget", 0) == 0, counts
+    assert counts.get("helper", 0) >= 3, counts
+
+
+def test_ts_freq_names_unsupported_lang_returns_none() -> None:
+    assert ts_freq_names("x = 1\n", "brainfuck") is None
+    assert ts_freq_names("x = 1\n", "python") is None  # Python uses tokenize

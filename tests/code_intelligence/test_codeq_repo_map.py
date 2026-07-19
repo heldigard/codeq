@@ -78,3 +78,63 @@ def test_map_py_freq_counts_real_calls() -> None:
         assert refs >= 3, (
             f"helper ref weight too low — real calls not counted: ~{refs}.\n{out}"
         )
+
+
+def test_map_js_freq_excludes_string_and_comment_tokens() -> None:
+    """Brace-lang parity with Python tokenize: when tree-sitter is installed,
+    `codeq map` must not inflate weight from string/comment mentions.
+
+    Setup mirrors the Python case: a.js defines `widget` and calls it twice;
+    b.js mentions `widget` only inside a comment and a string. With
+    tree-sitter, reported refs stay near the real calls; without it the
+    regex path still works but this test only asserts the tight bound when
+    the AST path is available."""
+    from codeq.shared.tree_sitter_extract import ts_available
+
+    if not ts_available():
+        return  # optional dep absent — suite stays green on bare installs
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "a.js").write_text(
+            "function widget() { return 1; }\nwidget();\nwidget();\n"
+        )
+        (root / "b.js").write_text(
+            "function thing() {\n"
+            '  const x = "widget widget widget";\n'
+            "  // widget widget\n"
+            "}\n"
+        )
+        out = _run_map(str(root))
+        widget_lines = [ln for ln in out.splitlines() if re.search(r"\bwidget\b", ln)]
+        assert widget_lines, f"widget missing from map:\n{out}"
+        m = re.search(r"~(\d+) refs", widget_lines[0])
+        assert m, f"no ref count on widget line: {widget_lines[0]}"
+        refs = int(m.group(1))
+        assert refs <= 3, (
+            f"widget ref weight inflated by string/comment tokens: ~{refs} refs "
+            f"(tree-sitter should count ~2 real calls).\nmap:\n{out}"
+        )
+
+
+def test_map_js_freq_counts_real_calls() -> None:
+    """Sanity: real JS call sites still accumulate map weight under the
+    tree-sitter frequency path (must not zero out legitimate references)."""
+    from codeq.shared.tree_sitter_extract import ts_available
+
+    if not ts_available():
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "a.js").write_text(
+            "function helper() { return 1; }\n"
+            "helper();\nhelper();\nhelper();\nhelper();\nhelper();\n"
+        )
+        out = _run_map(str(root))
+        helper_lines = [ln for ln in out.splitlines() if "helper" in ln]
+        assert helper_lines, f"helper missing from map:\n{out}"
+        m = re.search(r"~(\d+) refs", helper_lines[0])
+        assert m, f"no ref count on helper line: {helper_lines[0]}"
+        refs = int(m.group(1))
+        assert refs >= 3, (
+            f"helper ref weight too low — real calls not counted: ~{refs}.\n{out}"
+        )

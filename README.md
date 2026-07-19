@@ -45,6 +45,7 @@ prefer a cheaper structured path.
 - `ctags` on `PATH` (Universal Ctags; required)
 - `ast-grep` on `PATH` (required)
 - Optional: `ripgrep` on `PATH` — speeds up `refs`/`rdeps`; a built-in pure-Python walker is used otherwise. codeq NEVER depends on the system `grep`, whose behavior varies across GNU/ugrep/busybox/BSD.
+- Optional: `tree-sitter` + `tree-sitter-language-pack` (`pip install 'codeq-cli[ast]'`) — AST-exact body extraction, `refs` comment/string filtering, and `map` identifier frequency for JS/TS/Java/Go/Rust (parity with Python's tokenize path).
 - Optional: local Ollama plus `ollama_client.py` for `summary`, `context`, `relations`, and `--summary`. Default summary model is `TeichAI/Qwen3.5-9B-Fable-5-v1` (codeq_sum #1, ~6.5GB); override with `CODEQ_SUMMARY_MODEL`. Falls back to `Qwythos-9B` (~6.8GB) on VRAM contention; override with `CODEQ_FALLBACK_MODEL`.
 
 Run `codeq doctor` to check what is installed (`codeq doctor --install` installs missing binaries via cargo/npm/pipx where possible).
@@ -85,11 +86,21 @@ The `shared/` package is intentionally small and holds reusable infrastructure o
 ## Test
 
 ```bash
-python3 -m pytest
-python3 tests/test-code-intelligence.py
+# Unit + contract tests (prefer the project venv so optional deps resolve)
+python3 -m pytest tests/code_intelligence -q
+# End-to-end smoke across languages and external binaries
+python3 -m tests.code_intelligence.runner
 ```
 
 The runner exercises the full CLI contract across Python, TypeScript, Java, vendor exclusion, `map`, `rdeps`, context/summary shape, `ctags`, `ast-grep`, and `shellcheck`.
+
+Optional quality extras (native Ubuntu already has apt packages for most):
+
+```bash
+sudo apt install universal-ctags shellcheck ripgrep shfmt
+pip install -e '.[test]'   # includes tree-sitter for AST-exact refs/map/body
+codeq doctor
+```
 
 ## License
 

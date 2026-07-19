@@ -49,6 +49,7 @@ TOOLS: list[dict[str, object]] = [
         "importance": "optional",
         "why": "shell format (companion to shellcheck)",
         "managers": {
+            "apt": "sudo apt install shfmt",
             "brew": "brew install shfmt",
             "go": "go install mvdan.cc/sh/v3/cmd/shfmt@latest",
         },
@@ -75,10 +76,13 @@ TOOLS: list[dict[str, object]] = [
         "name": "tree-sitter",
         "importance": "optional",
         "python_module": "tree_sitter_language_pack",
-        "why": "AST-exact body extraction for JS/TS/Java/Go/Rust (closes the regex-literal-brace gap of the brace-count fallback)",
+        "why": (
+            "AST-exact body extraction, refs comment/string filter, and map "
+            "identifier frequency for JS/TS/Java/Go/Rust"
+        ),
         "managers": {
+            "pip": "pip install 'codeq-cli[ast]'",
             "pipx": "pipx inject codeq-cli tree-sitter tree-sitter-language-pack",
-            "npm": "npm install -g tree-sitter",
         },
     },
 ]
