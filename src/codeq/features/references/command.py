@@ -83,6 +83,23 @@ def _ts_filter_refs(name: str, lines: list[str], lang: str) -> list[str]:
     return ts_filter_refs(name, lines, lang)
 
 
+def _ts_filter_decls(name: str, lines: list[str], lang: str) -> tuple[list[str], bool]:
+    """Drop JS/TS declaration lines of NAME via tree-sitter (per-file, so a
+    mixed tree with lang=None is still filtered by extension).
+
+    Returns (filtered_lines, replaces_regex). `replaces_regex=True` ONLY when
+    lang is explicitly JS/TS — the caller then SKIPS the regex def_re, which is
+    greedy for those langs (optional `function` collapses `foo();` into a decl).
+    For lang=None or other langs the regex def_re still runs after: the ts
+    filter only touches JS/TS files, leaving the rest to the regex path."""
+    from codeq.shared.tree_sitter_extract import ts_available, ts_filter_decls
+
+    if not ts_available():
+        return lines, False
+    filtered = ts_filter_decls(name, lines, lang)
+    return filtered, lang in ("javascript", "typescript")
+
+
 def get_refs(
     name: str,
     path: str,
@@ -96,17 +113,22 @@ def get_refs(
 
     Returns ['file:line:text', ...] or empty list if no references found.
     `limit=0` means unlimited."""
-    lines = _refs_lines(name, path, lang or "")
+    lang0 = lang or ""
+    lines = _refs_lines(name, path, lang0)
     if not lines:
         return []
-    lines = _ts_filter_refs(name, lines, lang or "")
-    def_re = _def_filter_re(lang or "", name)
+    lines = _ts_filter_refs(name, lines, lang0)
+    # JS/TS: tree-sitter declaration filter REPLACES the greedy regex def_re
+    # (whose optional `function` collapses a bare top-level `foo();` call into
+    # a declaration, losing real call sites). Other langs keep the regex path.
+    lines, ts_decls_applied = _ts_filter_decls(name, lines, lang0)
+    def_re = None if ts_decls_applied else _def_filter_re(lang0, name)
     result: list[str] = []
     for line in lines:
         m = re.match(r"^(.*?):(\d+):(.*)$", line)
         if not m:
             continue
-        if def_re.search(m.group(3)):
+        if def_re is not None and def_re.search(m.group(3)):
             continue  # skip the declaration itself
         result.append(line)
         if limit and len(result) >= limit:

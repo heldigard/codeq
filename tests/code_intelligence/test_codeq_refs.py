@@ -204,6 +204,46 @@ def test_ts_filter_works_without_explicit_lang() -> None:
         assert not any("label =" in r for r in rows), f"string leaked: {rows}"
 
 
+def test_ts_decl_filter_keeps_top_level_call() -> None:
+    """A bare top-level `foo();` is a CALL, not a declaration — it must
+    survive the def filter. The regex def_re is greedy (the `function`
+    keyword is optional), so it collapsed `foo();` into a declaration and
+    refs lost every top-level statement call. tree-sitter classifies the node
+    as `call_expression`, so it is kept; only the `function foo()` node is
+    dropped."""
+    if not _ts_available():
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "a.ts").write_text("function foo() { return 1; }\nfoo();\n")
+        rows = get_refs("foo", str(root), lang="typescript")
+        assert any(r.endswith("foo();") for r in rows), f"top-level call lost: {rows}"
+        assert not any("function foo" in r for r in rows), f"def leaked: {rows}"
+
+
+def test_ts_decl_filter_works_without_explicit_lang() -> None:
+    """A TS class method declaration must be filtered even when lang is not
+    passed (the `refs` CLI path, lang=None). Regression: the first version
+    gated the filter on `lang in (javascript, typescript)`, so a mixed-tree
+    call with no explicit lang left `protected foo(...)` declaration lines in
+    the output. The filter now infers the language per file from extension."""
+    if not _ts_available():
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "svc.ts").write_text(
+            "export class Svc {\n"
+            "  protected foo(event: Event): void { return; }\n"
+            "}\n"
+            "foo(new Event('x'));\n"
+        )
+        rows = get_refs("foo", str(root))  # lang defaults to None
+        assert any(r.endswith("foo(new Event('x'));") for r in rows), (
+            f"top-level call lost: {rows}"
+        )
+        assert not any("protected foo" in r for r in rows), f"method def leaked: {rows}"
+
+
 def test_bash_refs_filters_bare_function_declaration() -> None:
     """Bash `name() { ... }` (no `function` keyword) is a declaration, not a
     call. The generic def-filter misses this form because it requires a

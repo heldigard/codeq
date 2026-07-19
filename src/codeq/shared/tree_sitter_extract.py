@@ -72,8 +72,11 @@ _TYPE_NODE_TYPES: dict[str, frozenset[str]] = {
 
 # Node types that hold the DECLARED identifier (the symbol name). Differs per
 # grammar: Go method/type names are `field_identifier`, TS/Java/Rust type
-# names are `type_identifier`, most others are `identifier`.
-_NAME_FIELD_TYPES = frozenset({"identifier", "type_identifier", "field_identifier"})
+# names are `type_identifier`, JS/TS class-method names are
+# `property_identifier`, most others are `identifier`.
+_NAME_FIELD_TYPES = frozenset(
+    {"identifier", "type_identifier", "field_identifier", "property_identifier"}
+)
 
 # Cache parsers per language (parsing is the hot path; language setup is not).
 _parsers: dict[str, object] = {}
@@ -278,6 +281,74 @@ def _lang_of_file(file: str) -> str | None:
     explicit language (the `refs` CLI path passes lang=None for mixed trees)."""
     ext = Path(file).suffix.lstrip(".")
     return EXT_LANG.get(ext)
+
+
+# ---------------------------------------------------------------------------
+# Declaration filtering — drop the def line itself (JS/TS precision fix)
+# ---------------------------------------------------------------------------
+
+
+def ts_filter_decls(name: str, ref_lines: list[str], lang: str) -> list[str]:
+    """Drop REF_LINES that are the DECLARATION line of NAME (a function/method/
+    type definition), via tree-sitter.
+
+    For JS/TS the regex def_re is greedy — its `function` keyword is optional,
+    so a bare top-level `foo();` call collapses into a "declaration" and refs
+    loses every top-level statement call (a recall bug). tree-sitter names the
+    node `call_expression`, so the call survives; only the `function foo()`
+    declaration node is dropped.
+
+    Language is inferred per file from extension when LANG is empty (the `refs`
+    CLI path passes lang=None for a mixed tree), so JS/TS files are filtered
+    even without an explicit lang. Other languages and unclassifiable files
+    pass through unchanged so the caller's regex def_re still handles them."""
+    if not ref_lines or not ts_available():
+        return ref_lines
+    cache: dict[str, set[int] | None] = {}
+    out: list[str] = []
+    for rl in ref_lines:
+        m = re.match(r"^(.*?):(\d+):(.*)$", rl)
+        if not m:
+            out.append(rl)
+            continue
+        file, line_no = m.group(1), int(m.group(2))
+        if file not in cache:
+            cache[file] = _decl_lines_for(file, lang, name)
+        decl_lines = cache[file]
+        # None = unclassifiable → keep the line (regex def_re runs as fallback).
+        if decl_lines is None or line_no not in decl_lines:
+            out.append(rl)
+    return out
+
+
+def _decl_lines_for(file: str, lang_hint: str, name: str) -> set[int] | None:
+    """1-based line numbers of the function/type DECLARATION of NAME in FILE,
+    or None when the file cannot be classified so the caller falls back to the
+    regex def_re.
+
+    Only declarations whose declared identifier equals NAME are counted, so a
+    line that declares foo but calls NAME (`function foo() { NAME(); }`) is NOT
+    dropped for NAME — the call on it is a real reference."""
+    lang = lang_hint or _lang_of_file(file)
+    if lang is None or lang not in ("javascript", "typescript"):
+        return None
+    try:
+        src = Path(file).read_bytes()
+    except OSError:
+        return None
+    parser = _parser_for(lang)
+    if parser is None:
+        return None
+    tree = parser.parse(src)
+    decl_types = _FUNC_NODE_TYPES.get(lang, frozenset()) | _TYPE_NODE_TYPES.get(
+        lang, frozenset()
+    )
+    line_starts = _line_starts(src)
+    decl_lines: set[int] = set()
+    for node in _walk(tree.root_node):
+        if node.type in decl_types and _declared_name(node) == name:
+            decl_lines.add(bisect.bisect_right(line_starts, node.start_byte))
+    return decl_lines
 
 
 def _comment_string_ranges(
