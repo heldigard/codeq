@@ -262,6 +262,12 @@ VENDOR_EXCLUDES = [
     "memory-bank",
     ".claude",
     ".codex",
+    ".grok",  # Grok Build TUI / xAI agent harness
+    ".opencode",  # OpenCode CLI agent
+    ".gemini",  # Gemini / Antigravity harness config tree
+    ".antigravity",  # Google Antigravity agent
+    ".kimi",  # Kimi CLI
+    ".qwen",  # Qwen CLI
     "file-history",
     # JVM
     ".gradle",
