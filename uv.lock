@@ -49,7 +49,6 @@ wheels = [
 
 [[package]]
 name = "codeq-cli"
-version = "1.6.0"
 source = { editable = "." }
 
 [package.optional-dependencies]

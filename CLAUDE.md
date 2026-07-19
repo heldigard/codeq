@@ -19,13 +19,15 @@ do not add MCP server code or an `mcp` dependency.
 
 ## Stack
 - Python ≥ 3.11; build backend hatchling; package `codeq-cli` (import `codeq`).
-- External binaries (checked by `codeq doctor`): **ctags**, **ast-grep**,
-  **shellcheck** (required); `rg`, `ollama` (optional).
+- External binaries (checked by `codeq doctor`): **ctags**, **ast-grep**
+  (required); `rg`, `shellcheck`, `shfmt`, `ollama`, tree-sitter (optional).
+  codeq never invokes shellcheck/shfmt itself — they are ecosystem tools the
+  smoke runner exercises.
 
 ## Entry points / subcommands
 `codeq` console script (`src/codeq/cli.py`): `find`, `outline`, `body`,
 `class`, `sig`, `deps`, `rdeps`, `refs`, `tags`, `check`, `map`, `summary`,
-`context`, `relations`, `rename`, `doctor`.
+`context`, `relations`, `rename`, `capabilities`, `doctor`.
 
 ## Conventions
 - Vertical slices in `src/codeq/features/<feature>/`; shared infra in
