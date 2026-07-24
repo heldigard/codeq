@@ -98,7 +98,8 @@ ignore = [
 [tool.vulture]
 # Mock-injection FP class: @patch-injected params and Mock attribute configs
 # are isolation plumbing, not dead code (codescan dead flagged 20/20 FPs).
-ignore_names = ["return_value", "side_effect", "mock_*"]
+# pytestmark is read by pytest's collection (module-level mark), not by code.
+ignore_names = ["return_value", "side_effect", "mock_*", "pytestmark"]
 min_confidence = 60
 
 [tool.hatch.version]
