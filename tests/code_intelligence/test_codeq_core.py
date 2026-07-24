@@ -453,6 +453,9 @@ def test_codeq_json_output(fixture_dir: Path) -> None:
     assert data["refs_count"] > 0
     assert any(imp["module"] == "json" for imp in data["imports"])
     assert data["summary"]["status"] == "skipped"
+    assert data["exit_code"] == 0
+    assert data["unchanged"] is False
+    assert len(data["fingerprint"]) == 64
 
     # relations: structured, compact orientation bundle without the body/deps.
     result = run(
@@ -473,6 +476,8 @@ def test_codeq_json_output(fixture_dir: Path) -> None:
     assert "body" not in data
     assert "imports" not in data
     assert data["internal_call_hints"] == []
+    assert data["unchanged"] is False
+    assert len(data["fingerprint"]) == 64
 
     # body: structured JSON
     result = run(["codeq", "--json", "body", "calculate", str(file_path)])
@@ -491,6 +496,111 @@ def test_codeq_json_output(fixture_dir: Path) -> None:
     assert "no def/class" in data["error"]
 
 
+def test_codeq_json_context_incremental_receipts(fixture_dir: Path) -> None:
+    """Repeat context is compact, while invalid/stale fingerprints fail open."""
+    import json
+
+    file_path = fixture_dir / "calc.py"
+    base = [
+        "codeq",
+        "--json",
+        "context",
+        "calculate",
+        str(file_path),
+        "-p",
+        str(fixture_dir),
+        "--no-llm",
+    ]
+    first = run(base)
+    first_data = json.loads(first.stdout)
+    fingerprint = first_data["fingerprint"]
+
+    repeat = run(base)
+    repeat_data = json.loads(repeat.stdout)
+    assert repeat_data["fingerprint"] == fingerprint
+
+    receipt = run([*base, "--since-fingerprint", fingerprint])
+    receipt_data = json.loads(receipt.stdout)
+    assert receipt_data["unchanged"] is True
+    assert receipt_data["fingerprint"] == fingerprint
+    assert receipt_data["exit_code"] == 0
+    assert "body" not in receipt_data
+    assert "refs" not in receipt_data
+    assert len(receipt.stdout) < len(first.stdout) / 2
+
+    invalid = run([*base, "--since-fingerprint", "not-a-sha256"])
+    invalid_data = json.loads(invalid.stdout)
+    assert invalid_data["unchanged"] is False
+    assert invalid_data["fingerprint"] == fingerprint
+    assert "body" in invalid_data
+
+    caller = fixture_dir / "main.py"
+    caller.write_text(
+        caller.read_text(encoding="utf-8")
+        + "\n\ndef alternate():\n    return calculate(3, 4)\n",
+        encoding="utf-8",
+    )
+    refs_changed = run([*base, "--since-fingerprint", fingerprint])
+    refs_changed_data = json.loads(refs_changed.stdout)
+    assert refs_changed_data["unchanged"] is False
+    assert refs_changed_data["fingerprint"] != fingerprint
+    assert refs_changed_data["refs_count"] > first_data["refs_count"]
+
+    refs_fingerprint = refs_changed_data["fingerprint"]
+    original = file_path.read_text(encoding="utf-8")
+    file_path.write_text(
+        original.replace("return a + b", "return a - b"), encoding="utf-8"
+    )
+    changed = run([*base, "--since-fingerprint", refs_fingerprint])
+    changed_data = json.loads(changed.stdout)
+    assert changed_data["unchanged"] is False
+    assert changed_data["fingerprint"] != refs_fingerprint
+    assert "return a - b" in changed_data["body"]
+
+
+def test_codeq_json_relations_incremental_receipt(fixture_dir: Path) -> None:
+    import json
+
+    base = [
+        "codeq",
+        "--json",
+        "relations",
+        "calculate",
+        str(fixture_dir / "calc.py"),
+        "-p",
+        str(fixture_dir),
+        "--no-llm",
+    ]
+    full = run(base)
+    full_data = json.loads(full.stdout)
+    receipt = run([*base, "--since-fingerprint", full_data["fingerprint"]])
+    receipt_data = json.loads(receipt.stdout)
+
+    assert receipt_data["unchanged"] is True
+    assert receipt_data["fingerprint"] == full_data["fingerprint"]
+    assert "internal_call_hints" not in receipt_data
+    assert "refs" not in receipt_data
+    assert len(receipt.stdout) < len(full.stdout) / 2
+
+
+def test_codeq_since_fingerprint_requires_json(fixture_dir: Path) -> None:
+    result = run(
+        [
+            "codeq",
+            "context",
+            "calculate",
+            str(fixture_dir / "calc.py"),
+            "--no-llm",
+            "--since-fingerprint",
+            "abc",
+        ],
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "--since-fingerprint requires --json" in result.stderr
+
+
 def test_codeq_capabilities_contract() -> None:
     """Routers/workers need stable risk hints before deciding which hand to use."""
     import json
@@ -506,7 +616,9 @@ def test_codeq_capabilities_contract() -> None:
 
     assert data["schema_version"] == 1
     assert by_name["context"]["structured_json"] is True
+    assert by_name["context"]["incremental_fingerprint"] is True
     assert by_name["relations"]["read_only"] is True
+    assert by_name["relations"]["incremental_fingerprint"] is True
     assert by_name["rename"]["destructive"] is True
     assert by_name["doctor"]["open_world"] is True
 

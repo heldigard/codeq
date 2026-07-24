@@ -120,6 +120,7 @@ CAPABILITIES: tuple[dict[str, Any], ...] = (
         "idempotent": True,
         "open_world": False,
         "structured_json": True,
+        "incremental_fingerprint": True,
     },
     {
         "name": "relations",
@@ -129,6 +130,7 @@ CAPABILITIES: tuple[dict[str, Any], ...] = (
         "idempotent": True,
         "open_world": False,
         "structured_json": True,
+        "incremental_fingerprint": True,
     },
     {
         "name": "rename",
@@ -161,6 +163,7 @@ def capabilities_payload() -> dict[str, Any]:
             "idempotent": "Safe to repeat with identical arguments.",
             "open_world": "May call network/package managers or external systems.",
             "structured_json": "Has first-class typed output under global --json.",
+            "incremental_fingerprint": "Successful JSON bundles support stateless unchanged receipts.",
         },
         "capabilities": list(CAPABILITIES),
     }

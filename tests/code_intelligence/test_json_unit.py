@@ -12,7 +12,11 @@ import argparse
 import json
 import sys
 
-from codeq.json_handler.core import capture_cmd_output, emit_json
+from codeq.json_handler.core import (
+    capture_cmd_output,
+    emit_json,
+    prepare_incremental_payload,
+)
 from codeq.json_handler.dispatch import STRUCTURED_HANDLERS, run_with_json
 
 
@@ -42,6 +46,57 @@ def test_emit_json_preserves_unicode(capsys: object) -> None:
 def test_emit_json_nonzero_exit_propagates(capsys: object) -> None:
     assert emit_json({"command": "c", "exit_code": 2}, 2) == 2
     _parse_stdout(capsys)
+
+
+def test_incremental_fingerprint_is_canonical_and_ignores_latency() -> None:
+    first = prepare_incremental_payload(
+        {
+            "command": "context",
+            "name": "target",
+            "summary": {"text": "Does work.", "latency_seconds": 1.2},
+            "refs": ["b.py:2", "a.py:1"],
+        },
+        0,
+    )
+    reordered = prepare_incremental_payload(
+        {
+            "refs": ["b.py:2", "a.py:1"],
+            "summary": {"latency_seconds": 9.9, "text": "Does work."},
+            "name": "target",
+            "command": "context",
+        },
+        0,
+    )
+
+    assert first["fingerprint"] == reordered["fingerprint"]
+    receipt = prepare_incremental_payload(
+        {"command": "context", "name": "target"},
+        0,
+        str(
+            prepare_incremental_payload({"command": "context", "name": "target"}, 0)[
+                "fingerprint"
+            ]
+        ),
+    )
+    assert receipt["unchanged"] is True
+    assert "refs" not in receipt
+
+
+def test_incremental_fingerprint_covers_semantics_and_skips_errors() -> None:
+    base = prepare_incremental_payload(
+        {"command": "relations", "summary": {"text": "A"}}, 0
+    )
+    changed = prepare_incremental_payload(
+        {"command": "relations", "summary": {"text": "B"}}, 0
+    )
+    error = prepare_incremental_payload(
+        {"command": "relations", "error": "missing"}, 1, "irrelevant"
+    )
+
+    assert base["fingerprint"] != changed["fingerprint"]
+    assert error["exit_code"] == 1
+    assert "fingerprint" not in error
+    assert "unchanged" not in error
 
 
 def test_capture_cmd_output_captures_streams_and_code() -> None:

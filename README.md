@@ -23,6 +23,8 @@ codeq relations NAME FILE -p . --no-llm
 codeq --json find NAME -p .           # structured JSON for any command
 codeq --json context NAME FILE -p . --no-llm
 codeq --json relations NAME FILE -p . --no-llm
+# Reuse the prior fingerprint; unchanged context returns only a small receipt:
+codeq --json context NAME FILE -p . --no-llm --since-fingerprint SHA256
 codeq capabilities
 codeq --json capabilities
 codeq doctor                # check required/optional external binaries
@@ -34,6 +36,16 @@ Use Markdown output for direct controller reading. Add `--json` before any
 subcommand to get a structured JSON envelope with a `command` discriminator,
 typed fields, and a machine-branchable `exit_code` — no Markdown parsing
 needed. All 17 subcommands have structured JSON handlers.
+
+Successful JSON `context` and `relations` bundles include a deterministic
+SHA-256 `fingerprint`. Pass it back with `--since-fingerprint` on a later call:
+if all semantic facts are unchanged, `codeq` emits only identity fields,
+`fingerprint`, and `"unchanged": true`; otherwise it emits the complete fresh
+bundle with a new fingerprint. This is stateless validation, not a cache:
+`codeq` still recomputes the bundle, so it saves controller input tokens rather
+than local CPU time and cannot return stale indexed context. Local-LLM latency
+metadata is excluded from the hash; summary text and all structural facts are
+included.
 
 `capabilities` is a local tool-card manifest for routers. It marks each command
 with read-only, destructive, idempotent, open-world, and structured-JSON hints

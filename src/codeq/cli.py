@@ -214,6 +214,12 @@ examples:
         action="store_true",
         help="cap refs half at 20 for fast orientation",
     )
+    cx.add_argument(
+        "--since-fingerprint",
+        default=None,
+        metavar="SHA256",
+        help="with --json, return a minimal receipt when the semantic bundle is unchanged",
+    )
     cx.set_defaults(func=cmd_context)
 
     rl = sub.add_parser(
@@ -234,6 +240,12 @@ examples:
         "--quick",
         action="store_true",
         help="cap refs half at 20 for fast orientation",
+    )
+    rl.add_argument(
+        "--since-fingerprint",
+        default=None,
+        metavar="SHA256",
+        help="with --json, return a minimal receipt when the semantic bundle is unchanged",
     )
     rl.set_defaults(func=cmd_relations)
 
@@ -282,6 +294,8 @@ examples:
     doc.set_defaults(func=cmd_doctor)
 
     args = ap.parse_args()
+    if getattr(args, "since_fingerprint", None) and not args.json_output:
+        ap.error("--since-fingerprint requires --json")
     if args.json_output:
         from codeq.json_handler import run_with_json
 

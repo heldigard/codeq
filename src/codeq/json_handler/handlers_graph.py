@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-from codeq.json_handler.core import emit_json
+from codeq.json_handler.core import emit_json, prepare_incremental_payload
 
 
 def _refs_json(args: argparse.Namespace) -> int:
@@ -90,6 +90,11 @@ def _context_json(args: argparse.Namespace) -> int:
         payload["refs"] = payload["refs"][:_QUICK_REFS_LIMIT]
         payload["refs_count"] = len(payload["refs"])
         payload["truncated"] = len(payload["refs"]) >= _QUICK_REFS_LIMIT
+    payload = prepare_incremental_payload(
+        payload,
+        exit_code,
+        getattr(args, "since_fingerprint", None),
+    )
     return emit_json(payload, exit_code)
 
 
@@ -113,6 +118,11 @@ def _relations_json(args: argparse.Namespace) -> int:
         payload["refs"] = payload["refs"][:_QUICK_REFS_LIMIT]
         payload["refs_count"] = len(payload["refs"])
         payload["truncated"] = len(payload["refs"]) >= _QUICK_REFS_LIMIT
+    payload = prepare_incremental_payload(
+        payload,
+        exit_code,
+        getattr(args, "since_fingerprint", None),
+    )
     return emit_json(payload, exit_code)
 
 
