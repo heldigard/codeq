@@ -20,6 +20,7 @@ codeq rename OLD NEW -p . -l python -n   # AST structural rename (dry-run; strin
 codeq summary NAME FILE --no-llm
 codeq context NAME FILE -p . --no-llm
 codeq relations NAME FILE -p . --no-llm
+codeq --json find NAME -p .           # structured JSON for any command
 codeq --json context NAME FILE -p . --no-llm
 codeq --json relations NAME FILE -p . --no-llm
 codeq capabilities
@@ -29,10 +30,10 @@ codeq doctor                # check required/optional external binaries
 
 The goal is to give an agent the exact symbol body, signature, references, imports, reverse importers, or repo map it needs without dumping whole files into context.
 
-Use Markdown output for direct controller reading. Use `--json context` and
-`--json relations` when another worker, script, or MCP bridge consumes the
-result; those commands expose typed fields instead of forcing downstream code
-to parse Markdown sections.
+Use Markdown output for direct controller reading. Add `--json` before any
+subcommand to get a structured JSON envelope with a `command` discriminator,
+typed fields, and a machine-branchable `exit_code` — no Markdown parsing
+needed. All 17 subcommands have structured JSON handlers.
 
 `capabilities` is a local tool-card manifest for routers. It marks each command
 with read-only, destructive, idempotent, open-world, and structured-JSON hints
