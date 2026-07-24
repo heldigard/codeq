@@ -13,6 +13,26 @@ from pathlib import Path
 from .fixtures import write_fixtures
 from .helpers import run
 
+# ── JSON error envelope (die() must not leak plain text under --json) ──
+
+
+def test_json_missing_file_emits_json_error() -> None:
+    """A missing file must produce a JSON error envelope, not plain text.
+
+    Regression: feature functions call die() (plain stderr + sys.exit) which
+    bypassed the --json contract, breaking machine consumers expecting JSON.
+    """
+    result = run(
+        ["codeq", "--json", "outline", "/nonexistent_file.py"],
+        check=False,
+    )
+    data = json.loads(result.stdout)
+    assert data["command"] == "outline"
+    assert "error" in data
+    assert "nonexistent" in data["error"]
+    assert data["exit_code"] == 2
+
+
 # ── outline ──────────────────────────────────────────────────────────
 
 
