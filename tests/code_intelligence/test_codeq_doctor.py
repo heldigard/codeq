@@ -4,16 +4,17 @@ import argparse
 import builtins
 from typing import Any
 from unittest.mock import MagicMock, patch
+
 import pytest
 
 from codeq.features.doctor.command import (
-    cmd_doctor,
     _detect,
-    _detect_tool,
     _detect_python_module,
+    _detect_tool,
     _manager_available,
-    _try_install,
     _run_install,
+    _try_install,
+    cmd_doctor,
 )
 
 
@@ -31,7 +32,11 @@ def test_detect_tool_present() -> None:
         assert path == "/usr/bin/dummy"
         assert ver == "dummy version 1.2.3"
         mock_run.assert_called_once_with(
-            ["dummy", "--version"], capture_output=True, text=True, timeout=6
+            ["dummy", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=6,
+            check=False,
         )
 
 

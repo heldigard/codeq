@@ -38,7 +38,6 @@ if not (shared_scripts / "ollama_client.py").exists():
     shared_scripts = Path.home() / ".claude" / "scripts"
 sys.path.insert(0, str(shared_scripts))
 import ollama_client  # type: ignore[import-not-found]
-
 from _bench_samples import SAMPLES
 
 # Default candidate set — the models worth comparing for the summary task.

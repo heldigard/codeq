@@ -45,10 +45,10 @@ def _outline_json(args: argparse.Namespace) -> int:
 
 
 def _body_json(args: argparse.Namespace) -> int:
+    from codeq.features.code_context.command import _summary_payload
     from codeq.shared.core import lang_of
     from codeq.shared.extraction import _raw_body
     from codeq.shared.locators import _locate_line
-    from codeq.features.code_context.command import _summary_payload
 
     lang = lang_of(args.file, args.lang)
     raw = _raw_body(args.file, args.name, lang)
@@ -100,11 +100,11 @@ def _body_json(args: argparse.Namespace) -> int:
 
 
 def _class_json(args: argparse.Namespace) -> int:
+    from codeq.features.code_context.command import _summary_payload
     from codeq.shared.config import TYPE_KINDS
     from codeq.shared.core import lang_of
     from codeq.shared.extraction import _class_body
     from codeq.shared.locators import _locate_line
-    from codeq.features.code_context.command import _summary_payload
 
     lang = lang_of(args.file, args.lang)
     raw = _class_body(args.file, args.name, lang)
@@ -188,9 +188,9 @@ def _sig_json(args: argparse.Namespace) -> int:
 
 
 def _summary_json_cmd(args: argparse.Namespace) -> int:
+    from codeq.features.code_context.command import _summary_payload
     from codeq.shared.core import lang_of
     from codeq.shared.extraction import _raw_body
-    from codeq.features.code_context.command import _summary_payload
 
     lang = lang_of(args.file, args.lang)
     raw = _raw_body(args.file, args.name, lang)

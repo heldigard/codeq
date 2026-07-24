@@ -7,18 +7,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from codeq.features.dependencies.command import get_deps, get_rdeps
+from codeq.features.references.command import get_refs
 from codeq.shared.config import _RESERVED_KEYWORDS
 from codeq.shared.core import die, lang_of
-from codeq.features.dependencies.command import get_deps, get_rdeps
 from codeq.shared.extraction import _raw_body, _sig_from_raw
-from codeq.shared.locators import _locate_line
 from codeq.shared.llm import (
-    _maybe_emit_summary,
     _OLLAMA_DISABLED_PREFIX,
     _OLLAMA_SUMMARY_PREFIX,
+    _maybe_emit_summary,
     _summarize_code,
 )
-from codeq.features.references.command import get_refs
+from codeq.shared.locators import _locate_line
 
 
 # Bound the optional behavior flags for `build_context_payload` so the signature

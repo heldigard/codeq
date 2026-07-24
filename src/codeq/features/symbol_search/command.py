@@ -5,14 +5,14 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import sys
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 from codeq.shared.config import (
+    _FIND_SWEEP_FILE_CAP,
     CACHE_GLOBS,
     CTAGS,
     VENDOR_EXCLUDES,
-    _FIND_SWEEP_FILE_CAP,
 )
 from codeq.shared.core import _parse_ctags_line, ctags_exclude_args, die, lang_of, run
 from codeq.shared.locators import _locate_line, _regex_outline_methods

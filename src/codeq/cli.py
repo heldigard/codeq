@@ -3,16 +3,16 @@ from __future__ import annotations
 import argparse
 
 from codeq import __version__
-from codeq.features.symbol_body.command import cmd_body, cmd_class, cmd_sig
-from codeq.features.code_context.command import cmd_context, cmd_relations, cmd_summary
 from codeq.features.capabilities.command import cmd_capabilities
+from codeq.features.code_context.command import cmd_context, cmd_relations, cmd_summary
 from codeq.features.dependencies.command import cmd_deps, cmd_rdeps
 from codeq.features.doctor.command import cmd_doctor
-from codeq.features.repo_map.command import cmd_map
 from codeq.features.pattern_check.command import cmd_check
-from codeq.features.symbol_search.command import cmd_find, cmd_outline
 from codeq.features.references.command import cmd_refs
 from codeq.features.rename.command import cmd_rename
+from codeq.features.repo_map.command import cmd_map
+from codeq.features.symbol_body.command import cmd_body, cmd_class, cmd_sig
+from codeq.features.symbol_search.command import cmd_find, cmd_outline
 from codeq.features.tags.command import cmd_tags
 
 # vs-soft-allow — argparse subparser defs carry long multi-line help strings
@@ -286,7 +286,7 @@ examples:
         from codeq.json_handler import run_with_json
 
         return run_with_json(args)
-    from typing import Callable
+    from collections.abc import Callable
 
     func: Callable[[argparse.Namespace], int] = args.func
     return func(args)

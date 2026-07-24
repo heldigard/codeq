@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from unittest.mock import patch
+
 import pytest
 
 from codeq.features.pattern_check.command import cmd_check

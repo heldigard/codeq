@@ -65,6 +65,34 @@ check_untyped_defs = true
 module = ["tree_sitter", "tree_sitter_language_pack"]
 ignore_missing_imports = true
 
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+# Extend (not replace) ruff defaults: add import-sort, pyupgrade, bugbear,
+# simplify, pylint-warnings, ruff-specific, naming, executable, string-concat.
+extend-select = [
+  "I",              # isort
+  "UP",             # pyupgrade
+  "B",              # flake8-bugbear
+  "BLE",            # flake8-blind-except
+  "SIM",            # flake8-simplify
+  "PLW",            # pylint warnings
+  "RUF",            # ruff-specific
+  "ISC",            # implicit string concat
+  "N",              # pep8-naming
+  "EXE",            # flake8-executable
+]
+ignore = [
+  "E501",           # line-length: enforced by ruff format, not lint
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Legacy compatibility runner — hyphenated name predates package convention.
+"tests/test-code-intelligence.py" = ["N999"]
+# Bench/dev scripts — not shipped; broad catches and concat style are fine.
+"scripts/*" = ["BLE001", "ISC004"]
+
 [tool.vulture]
 # Mock-injection FP class: @patch-injected params and Mock attribute configs
 # are isolation plumbing, not dead code (codescan dead flagged 20/20 FPs).

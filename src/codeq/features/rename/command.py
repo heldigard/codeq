@@ -56,7 +56,7 @@ def cmd_rename(args: argparse.Namespace) -> int:
         return 2
     if args.dry_run:
         # Dry-run asks for JSON to get an EXACT match count (the previous
-        # text-output count was ~3× off: it counted diff header + context
+        # text-output count was ~3x off: it counted diff header + context
         # lines as matches). Run a SECOND ast-grep call with --json=compact
         # — the cost is acceptable (dry-run is a preview, not a hot path),
         # and the accuracy makes the dry-run report actionable.
@@ -123,7 +123,7 @@ def _count_dry_run_matches(old: str, new: str, lang: str, path: str) -> int:
 
     The text output of `ast-grep run -p` is a unified-diff-style block whose
     non-empty lines include a `@@ ... @@` header + context lines, not just
-    matches — counting them inflates the report ~3× (e.g. a file with 3
+    matches — counting them inflates the report ~3x (e.g. a file with 3
     matches and 4 context lines reported "~12"). `--json=compact` prints one
     JSON object per match; `len(json.loads(...))` is exact.
 

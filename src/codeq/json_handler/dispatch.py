@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from typing import Callable
+from collections.abc import Callable
 
 from codeq.json_handler.core import capture_cmd_output, emit_json
 from codeq.json_handler.handlers import (

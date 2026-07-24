@@ -4,7 +4,6 @@ import argparse
 import sys
 import tempfile
 from pathlib import Path
-
 from typing import Any
 
 from codeq.shared.config import ASTGREP, PROBE

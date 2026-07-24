@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 from typing import Any
 
-
 CAPABILITIES: tuple[dict[str, Any], ...] = (
     {
         "name": "find",

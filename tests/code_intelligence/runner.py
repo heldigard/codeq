@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Any
+from typing import Any
 
 from .fixtures import write_fixtures, write_java_fixtures, write_typescript_fixtures
 from .helpers import run

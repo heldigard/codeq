@@ -63,11 +63,11 @@ def _rename_error_payload(
 
 def _rename_json(args: argparse.Namespace) -> int:
     from codeq.features.rename.command import (
-        _validate_inputs,
-        _run_astgrep,
-        _looks_like_error,
         _count_dry_run_matches,
+        _looks_like_error,
         _parse_applied_count,
+        _run_astgrep,
+        _validate_inputs,
     )
 
     old, new = args.old, args.new
@@ -114,6 +114,7 @@ def _rename_json(args: argparse.Namespace) -> int:
 
 def _tags_json(args: argparse.Namespace) -> int:
     from pathlib import Path
+
     from codeq.shared.config import CTAGS, VENDOR_EXCLUDES
     from codeq.shared.core import ctags_exclude_args, run
 

@@ -7,8 +7,8 @@ from pathlib import Path
 from codeq.shared.config import TYPE_KINDS
 from codeq.shared.core import die, lang_of
 from codeq.shared.extraction import _class_body, _raw_body, _sig_from_raw
-from codeq.shared.locators import _locate_line
 from codeq.shared.llm import _maybe_emit_summary
+from codeq.shared.locators import _locate_line
 
 
 def cmd_class(args: argparse.Namespace) -> int:

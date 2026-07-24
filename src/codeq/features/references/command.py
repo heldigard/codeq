@@ -8,7 +8,7 @@ from codeq.shared.config import LANG_INCLUDES
 from codeq.shared.search import search_lexical, search_py_refs
 
 
-def _def_filter_re(lang: str, name: str) -> "re.Pattern[str]":
+def _def_filter_re(lang: str, name: str) -> re.Pattern[str]:
     """Regex matching a DECLARATION line of NAME, so `refs` can filter out the
     definition itself and show only call sites.
 

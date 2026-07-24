@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from codeq.shared.config import CTAGS, _METHOD_LOCATOR, _RESERVED_KEYWORDS
+from codeq.shared.config import _METHOD_LOCATOR, _RESERVED_KEYWORDS, CTAGS
 from codeq.shared.core import _parse_ctags_line, lang_of, run
 
 

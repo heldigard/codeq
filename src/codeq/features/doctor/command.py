@@ -102,7 +102,7 @@ def _detect(name: str) -> tuple[str | None, str | None]:
         return None, None
     try:
         proc = subprocess.run(
-            [name, "--version"], capture_output=True, text=True, timeout=6
+            [name, "--version"], capture_output=True, text=True, timeout=6, check=False
         )
     except (OSError, subprocess.SubprocessError):
         return path, None

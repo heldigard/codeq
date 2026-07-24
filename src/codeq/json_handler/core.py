@@ -6,8 +6,9 @@ import argparse
 import io
 import json
 import sys
+from collections.abc import Callable
 from contextlib import redirect_stderr, redirect_stdout
-from typing import Any, Callable
+from typing import Any
 
 
 def emit_json(data: dict[str, Any], exit_code: int) -> int:

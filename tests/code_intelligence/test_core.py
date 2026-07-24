@@ -16,7 +16,6 @@ from codeq.shared.core import (
     run,
 )
 
-
 # ---------------------------------------------------------------------------
 # _parse_ctags_line
 # ---------------------------------------------------------------------------
@@ -153,7 +152,7 @@ class TestRunTimeout:
     @patch("codeq.shared.core.subprocess.run")
     def test_nonzero_return_code(self, mock_subp: MagicMock) -> None:
         mock_subp.return_value = MagicMock(returncode=1, stdout="", stderr="fail")
-        rc, out, err = run(["false"])
+        rc, _out, err = run(["false"])
         assert rc == 1
         assert err == "fail"
 

@@ -17,8 +17,8 @@ import os
 import re
 import shutil
 import subprocess
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 from codeq.shared.config import FILE_EXCLUDES, VENDOR_EXCLUDES
 
@@ -29,7 +29,7 @@ _RG: str | bool | None = None
 def rg_binary() -> str | None:
     """Real ripgrep binary on PATH (None if absent). `shutil.which` ignores
     shell functions/aliases, so this is the binary subprocess would invoke."""
-    global _RG
+    global _RG  # noqa: PLW0603 — lazy-init cache, single writer
     if _RG is None:
         _RG = shutil.which("rg") or False
     return _RG if isinstance(_RG, str) else None
@@ -95,7 +95,9 @@ def _rg_search(
         cmd += ["-g", glob]
     cmd += ["--", pattern, path]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=30, check=False
+        )
     except (OSError, FileNotFoundError, subprocess.TimeoutExpired):
         return None  # rg hung/missing → fall back to the pure-Python walker
     if proc.returncode not in (0, 1):  # 0 = matches, 1 = no matches

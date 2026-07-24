@@ -20,7 +20,7 @@ from codeq.shared.config import (
 
 
 def test_supported_langs_matches_ext_lang_values() -> None:
-    assert SUPPORTED_LANGS == frozenset(EXT_LANG.values())
+    assert frozenset(EXT_LANG.values()) == SUPPORTED_LANGS
 
 
 def test_lang_includes_cover_every_supported_lang() -> None:

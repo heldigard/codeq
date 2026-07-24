@@ -141,11 +141,11 @@ def test_lombok_boolean_primitive_is_only() -> None:
         "    private Boolean enabled;\n"  # wrapper Boolean → getX() only
         "}\n"
     )
-    f = tempfile.NamedTemporaryFile(suffix=".java", delete=False, mode="w")
-    f.write(src)
-    f.close()
+    with tempfile.NamedTemporaryFile(suffix=".java", delete=False, mode="w") as f:
+        f.write(src)
+        fpath = f.name
     try:
-        members = detect_lombok_members(f.name)
+        members = detect_lombok_members(fpath)
         names = {m.name for m in members}
         # primitive boolean: isX only
         assert "isActive" in names, f"missing isActive (primitive boolean): {names}"
@@ -160,7 +160,7 @@ def test_lombok_boolean_primitive_is_only() -> None:
     finally:
         import os
 
-        os.unlink(f.name)
+        os.unlink(fpath)
 
 
 def test_lombok_static_substring_field_not_excluded() -> None:
@@ -177,11 +177,11 @@ def test_lombok_static_substring_field_not_excluded() -> None:
         "    private int total;\n"
         "}\n"
     )
-    f = tempfile.NamedTemporaryFile(suffix=".java", delete=False, mode="w")
-    f.write(src)
-    f.close()
+    with tempfile.NamedTemporaryFile(suffix=".java", delete=False, mode="w") as f:
+        f.write(src)
+        fpath = f.name
     try:
-        members = detect_lombok_members(f.name)
+        members = detect_lombok_members(fpath)
         names = {m.name for m in members}
         # PascalCase of staticCount → StaticCount → getStaticCount / setStaticCount
         assert "getStaticCount" in names, (
@@ -192,7 +192,7 @@ def test_lombok_static_substring_field_not_excluded() -> None:
     finally:
         import os
 
-        os.unlink(f.name)
+        os.unlink(fpath)
 
 
 def test_lombok_package_decl_not_a_field() -> None:
@@ -210,11 +210,11 @@ def test_lombok_package_decl_not_a_field() -> None:
         "    private Long id;\n"
         "}\n"
     )
-    f = tempfile.NamedTemporaryFile(suffix=".java", delete=False, mode="w")
-    f.write(src)
-    f.close()
+    with tempfile.NamedTemporaryFile(suffix=".java", delete=False, mode="w") as f:
+        f.write(src)
+        fpath = f.name
     try:
-        members = detect_lombok_members(f.name)
+        members = detect_lombok_members(fpath)
         names = {m.name for m in members}
         assert "getId" in names, f"missing getId: {names}"
         # the package decl must NOT become a field

@@ -21,6 +21,7 @@ def _run_map(root: str) -> str:
         [sys.executable, "-m", "codeq", "map", "-p", root, "--top", "20"],
         capture_output=True,
         text=True,
+        check=False,
     )
     assert proc.returncode == 0, f"map failed: {proc.stderr}"
     return proc.stdout

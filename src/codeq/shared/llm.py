@@ -69,7 +69,7 @@ def _safe_generate(client: Any, prompt: str, model: str) -> str | None:
             prompt, model=model, temperature=0.2, num_ctx=8192, timeout=30
         )
         return str(res) if res is not None else None
-    except Exception:
+    except Exception:  # noqa: BLE001 — optional LLM; any failure → graceful None
         return None
 
 
@@ -87,7 +87,7 @@ def _llm_status(no_llm: bool = False) -> tuple[bool, str, str]:
     try:
         if not ollama_client.is_alive(timeout=2.0):
             return (False, "", "Ollama daemon not reachable on localhost:11434")
-    except Exception:
+    except Exception:  # noqa: BLE001 — optional daemon; any failure → unavailable
         return (False, "", "Ollama liveness probe failed")
     return (True, _CODEQ_SUMMARY_MODEL, "")
 
@@ -129,9 +129,9 @@ def _summarize_code(
     # summary model is a 9B (TeichAI/Qwen3.5-9B-Fable; was tuned for a 4B at
     # 2.5KB) — a 9B holds more context without losing focus, and 6KB still
     # fits num_ctx=8192 with signature + prompt margin.
-    BODY_BUDGET = 6000
-    is_truncated = len(body) > BODY_BUDGET
-    body_view = body[:BODY_BUDGET]
+    body_budget = 6000
+    is_truncated = len(body) > body_budget
+    body_view = body[:body_budget]
     truncation_note = (
         "\n[NOTE: BODY TRUNCATED — only the first portion is shown above; "
         "describe what is visible and do not assume the rest.]"

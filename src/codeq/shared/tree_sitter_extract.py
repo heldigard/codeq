@@ -25,8 +25,9 @@ from __future__ import annotations
 import bisect
 import importlib.util
 import re
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator, cast
+from typing import Any, cast
 
 from codeq.shared.config import EXT_LANG
 
@@ -146,7 +147,7 @@ def _build_parser(lang: str) -> Any | None:
         from tree_sitter_language_pack import get_language
 
         return Parser(get_language(lang))
-    except Exception:
+    except Exception:  # noqa: BLE001 — optional dep; any import/init failure → None
         return None
 
 
@@ -408,7 +409,7 @@ def ts_freq_names(text: str, lang: str) -> dict[str, int] | None:
     to the regex best-effort extractor.
 
     Used by `codeq map` so brace-langs get the same string/comment exclusion
-    that Python already has via `tokenize` (a name mentioned 50× in comments
+    that Python already has via `tokenize` (a name mentioned 50x in comments
     must not inflate its reference weight)."""
     if not ts_available() or lang not in _COMMENT_STRING_NODE_TYPES:
         return None
@@ -418,7 +419,7 @@ def ts_freq_names(text: str, lang: str) -> dict[str, int] | None:
     src = text.encode("utf-8", "replace")
     try:
         tree = parser.parse(src)
-    except Exception:
+    except Exception:  # noqa: BLE001 — parser crash on malformed input → None
         return None
     bad = _COMMENT_STRING_NODE_TYPES[lang]
     counts: dict[str, int] = {}

@@ -5,7 +5,6 @@ from pathlib import Path
 
 from .helpers import run
 
-
 EXCLUDED_DIRS = [
     "node_modules/lodash",
     "__pycache__",

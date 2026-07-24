@@ -71,8 +71,8 @@ def _rdeps_json(args: argparse.Namespace) -> int:
 
 def _context_json(args: argparse.Namespace) -> int:
     from codeq.features.code_context.command import (
-        _ContextOptions,
         _QUICK_REFS_LIMIT,
+        _ContextOptions,
         build_context_payload,
     )
 
@@ -95,8 +95,8 @@ def _context_json(args: argparse.Namespace) -> int:
 
 def _relations_json(args: argparse.Namespace) -> int:
     from codeq.features.code_context.command import (
-        _ContextOptions,
         _QUICK_REFS_LIMIT,
+        _ContextOptions,
         build_relations_payload,
     )
 

@@ -157,7 +157,7 @@ def test_codeq_summary_and_context_live() -> None:
 
         if not ollama_client.is_alive(timeout=2.0):
             return  # daemon down — skip
-    except Exception:
+    except Exception:  # noqa: BLE001 — optional daemon; any failure → skip test
         return  # client/daemon unavailable — skip
 
     with tempfile.TemporaryDirectory() as tmp:

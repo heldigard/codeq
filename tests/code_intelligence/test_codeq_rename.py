@@ -20,6 +20,7 @@ def _run_cli(*args: str) -> tuple[int, str, str]:
         [sys.executable, "-m", "codeq", *args],
         capture_output=True,
         text=True,
+        check=False,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
@@ -96,7 +97,7 @@ def test_rename_dry_run_count_is_exact_not_lines() -> None:
     """`--dry-run` reports the EXACT match count (3), not the inflated
     non-empty output-line count (~12: `@@` header + 7 diff lines + 4
     context lines). The previous implementation counted output lines of
-    ast-grep's unified-diff-style scan, which inflates ~3× for typical
+    ast-grep's unified-diff-style scan, which inflates ~3x for typical
     matches and breaks the dry-run signal — users saw "~12 match line(s)"
     for a file with 3 matches and skipped the rewrite.
 

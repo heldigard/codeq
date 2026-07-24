@@ -29,7 +29,9 @@ def run(cmd: list[str]) -> tuple[int, str, str]:
     failure (no fallback for ctags/ast-grep) — surface it as `die` rather than
     hanging the agent loop indefinitely."""
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=_BIN_TIMEOUT)
+        p = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=_BIN_TIMEOUT, check=False
+        )
     except subprocess.TimeoutExpired:
         tool = cmd[0] if cmd else "command"
         die(
